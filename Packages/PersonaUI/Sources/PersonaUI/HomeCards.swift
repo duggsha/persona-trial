@@ -3149,8 +3149,7 @@ struct SuggestionCard: View, Equatable {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
-        // The gray band is the EXPANDED-state signal, one rule for every card
-        //: open = gray header band over the white
+        // The gray band is the EXPANDED-state signal, one rule for every card — open = gray header band over the white
         // body (square seam — the body owns the bottom rounding), collapsed =
         // one white plate. Never per-card. The tint is deliberately WHISPER
         // light — just enough separation to read the header as its own block,

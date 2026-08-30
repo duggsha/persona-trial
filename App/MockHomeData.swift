@@ -24,6 +24,45 @@ enum MockHomeData {
                     seedPrompt: "Help me plan tomorrow")
     ]
 
+    // MARK: - The chat transcript
+
+    /// A short conversation, newest last. `date` drives the day separators and
+    /// the swipe-to-reveal timestamps; `deliveredAt` / `readAt` drive the
+    /// receipt line under the last outgoing bubble.
+    static let messages: [ChatMessage] = {
+        func at(_ minutesAgo: Int) -> Date { Date().addingTimeInterval(TimeInterval(-minutesAgo * 60)) }
+        func clock(_ date: Date) -> String {
+            date.formatted(.dateTime.hour().minute())
+        }
+
+        var out: [ChatMessage] = []
+        func turn(_ text: String, _ isUser: Bool, _ minutesAgo: Int, delivered: Bool = false, read: Bool = false) {
+            let when = at(minutesAgo)
+            out.append(ChatMessage(
+                text: text,
+                isUser: isUser,
+                time: clock(when),
+                date: when,
+                deliveredAt: delivered ? when : nil,
+                readAt: read ? when : nil
+            ))
+        }
+
+        turn("morning — anything I should know before the design review?", true, 96)
+        turn("Priya moved it to 6:30 and asked for the card grammar decision in writing beforehand.", false, 95)
+        turn("She also forwarded the deck from last quarter. Want me to pull the three slides that changed?", false, 95)
+        turn("yes please", true, 93)
+        turn("Got them. The changes are all in the expanded state — the action row went from three buttons to one, the evidence line moved above the fold, and the mic lost its ring.", false, 92)
+        turn("that last one was deliberate", true, 90)
+        turn("Noted. I'll say so in the summary rather than listing it as a regression.", false, 89)
+        // A gap, so the transcript shows its day/time separator behaviour.
+        turn("did sarah ever get back about thursday?", true, 14)
+        turn("Not yet. Her last message was this morning asking whether 2pm still works — it's sitting at the top of your feed.", false, 13)
+        turn("Want me to hold the slot until she answers?", false, 13)
+        turn("hold it till 5", true, 4, delivered: true, read: true)
+        return out
+    }()
+
     // MARK: - The card feed
 
     static let suggestions: [Suggestion] = [

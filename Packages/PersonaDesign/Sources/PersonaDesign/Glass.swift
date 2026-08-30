@@ -74,8 +74,7 @@ public extension View {
             .overlay { shape.stroke(DS.Palette.hairlineSoft, lineWidth: 1) }
     }
 
-    /// The solid full-white card plate — the one card color across the app
-    ///: suggestion cards already paint it directly (their
+    /// The solid full-white card plate — the one card color across the app — suggestion cards already paint it directly (their
     /// swipe tint mixes into the fill), and task / login / empty-state cards
     /// wear it through this. Depth pair = the suggestion plate's soft ambient
     /// halo + tight contact shadow, so every card floats at the same height.

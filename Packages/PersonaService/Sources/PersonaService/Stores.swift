@@ -48,6 +48,28 @@ public final class SettingsStore {
     public let connect = ConnectService()
 }
 
+/// Playable audio for voice messages in a transcript.
+///
+/// The real cache downloads a memo's bytes from its replay path and keeps them
+/// on disk so a replay after relaunch is instant. There is nothing to download
+/// here: a bubble whose clip is a local file still plays, and one pointing at a
+/// server path resolves to nothing — which the bubble already draws as its
+/// unavailable state.
+@MainActor
+@Observable
+public final class VoiceAudioCache {
+    public init() {}
+
+    /// Nothing is ever cached, so this is always nil.
+    public nonisolated static func cachedFile(forRemotePath path: String) -> URL? { nil }
+
+    public func localFile(forRemotePath path: String) async throws -> URL {
+        throw APIError.noBackend
+    }
+
+    public func prefetch(remotePath: String?) {}
+}
+
 /// Background agent work.
 ///
 /// The real store polls running tasks and relays the user's answers. Nothing
@@ -69,6 +91,13 @@ public final class DeepTaskStore {
     public func refresh() async {}
     public func refreshTask(_ id: String) async {}
     public func requestComposerFocus() { composerFocusRequested = true }
+
+    /// Open a task's thread. The real store resolves it by id and starts
+    /// polling; there are no tasks here, so this only marks the selection.
+    public func open(_ id: String) { activeTaskID = id }
+
+    /// Make sure a task is loaded before its thread draws. Nothing to load.
+    public func ensureLoaded(_ id: String) {}
 
     /// The real store optimistically inserts a placeholder the moment a task is
     /// kicked off, so the tray fills before the server answers. There is no

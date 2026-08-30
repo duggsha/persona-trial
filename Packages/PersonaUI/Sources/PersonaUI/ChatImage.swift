@@ -541,8 +541,7 @@ struct ChatPhotoViewer: View {
     /// receive touches, and paging away resets it (see `onChange` above).
     /// `current` gates the TRANSFORMS too: the shared scale/offset used to
     /// apply to every page, so a pinch also blew up the NEIGHBOR around its
-    /// own center and its edge slid onto screen mid-zoom (design report,
-    ///: "zooming bleeds in the next image").
+    /// own center and its edge slid onto screen mid-zoom (design report, — "zooming bleeds in the next image").
     private func photoPage(_ photo: ChatViewerPhoto, current: Bool) -> some View {
         Group {
             switch photo {

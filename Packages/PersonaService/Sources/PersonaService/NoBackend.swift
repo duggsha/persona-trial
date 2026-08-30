@@ -34,10 +34,14 @@ public struct APIClient: Sendable {
     }
 }
 
-/// The one error this package can produce.
+/// The errors this package can produce.
 public enum APIError: Error, Sendable, Equatable {
-    /// There is no backend in this build.
+    /// There is no backend in this build. The only one ever thrown.
     case noBackend
+    /// A status response. Never produced here, but call sites pattern-match on
+    /// it to tell "gone forever" (404) apart from a transient failure, and that
+    /// branch is part of how the views behave.
+    case http(Int, String?)
 
     /// Kept because the UI switches on it to pick an error illustration.
     public enum Kind: Sendable, Equatable {
@@ -48,7 +52,18 @@ public enum APIError: Error, Sendable, Equatable {
         case unknown
     }
 
-    public var kind: Kind { .transport }
+    public var kind: Kind {
+        switch self {
+        case .noBackend: .transport
+        case let .http(status, _):
+            switch status {
+            case 401, 403: .auth
+            case 500...: .server
+            case 400...: .client
+            default: .unknown
+            }
+        }
+    }
 }
 
 /// A file staged on a composer. Pure value type — it never leaves the device.

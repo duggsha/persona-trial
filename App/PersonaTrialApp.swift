@@ -9,7 +9,7 @@ struct PersonaTrialApp: App {
 
     var body: some Scene {
         WindowGroup {
-            DesignTrialHost()
+            DesignTrialHost(messages: MockHomeData.messages)
                 // The four stores the Home surfaces read. All seeded, all
                 // local, none of them able to fetch anything.
                 .environment(environment.home)
