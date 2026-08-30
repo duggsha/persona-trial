@@ -69,8 +69,12 @@ enum HomeIconTint {
     }
 }
 
-/// logo.dev publishable token (safe to embed — same one the backend uses).
-private let logoDevPublicToken = "pk_REDACTED"
+// The real app resolves a contact or brand avatar over the network — Gravatar
+// for a person who set a photo, then a logo API for the company domain. Both
+// paths are removed from this trial: the logo API needs a publishable token,
+// and shipping a live credential in a design trial is not worth the brand marks
+// it buys. Avatars fall back to the monogram and category badge below, which is
+// what the real app already draws when a fetch misses or the device is offline.
 
 /// The brand/contact source a card wants rendered. `.url` is a resolved photo URL
 /// (a real person photo) rendered directly; `.email` runs the full Gravatar →
@@ -300,31 +304,15 @@ struct RemoteContactAvatar: View {
             let address = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard address.contains("@") else { return .miss }
 
-            var sawTransient = false
-            // 1) Gravatar — only returns 200 when the user actually set a photo (d=404).
-            let hash = Insecure.MD5.hash(data: Data(address.utf8))
-                .map { String(format: "%02x", $0) }
-                .joined()
-            if let url = URL(string: "https://www.gravatar.com/avatar/\(hash)?d=404&s=240") {
-                switch await Self.fetch(url, key: key) {
-                case let .image(loaded): return .image(loaded)
-                case .retry: sawTransient = true
-                case .miss, .gmailMark: break // fetch never yields gmailMark
-                }
+            // The real chain is Gravatar (the photo they set) → the brand logo
+            // for the company domain, both over the network. Neither runs here.
+            // Consumer Google-mail senders still get the BUNDLED Gmail mark —
+            // that one ships in the asset catalog and needs nothing fetched.
+            if let domain = address.split(separator: "@").last.map(String.init),
+               Self.consumerGmailDomains.contains(domain) {
+                return .gmailMark
             }
-            // 2) Brand logo. Consumer Google-mail senders get the bundled Gmail
-            // mark; company domains fetch their real logo from logo.dev.
-            if let domain = address.split(separator: "@").last.map(String.init) {
-                if Self.consumerGmailDomains.contains(domain) {
-                    return sawTransient ? .retry : .gmailMark
-                }
-                switch await Self.fetchLogo(domain: domain, key: key) {
-                case let .image(loaded): return .image(loaded)
-                case .retry: sawTransient = true
-                case .miss, .gmailMark: break // fetch never yields gmailMark
-                }
-            }
-            return sawTransient ? .retry : .miss
+            return .miss
 
         case let .domain(raw):
             let domain = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -367,10 +355,10 @@ struct RemoteContactAvatar: View {
         #endif
     }
 
+    /// The real app fetches the domain's brand logo here. Removed with the rest
+    /// of the network: a definitive miss lets the category badge draw instead.
     private static func fetchLogo(domain: String, key: String) async -> Fetched {
-        guard let url = URL(string: "https://img.logo.dev/\(domain)?token=\(logoDevPublicToken)&size=120&format=png")
-        else { return .miss }
-        return await fetch(url, key: key)
+        .miss
     }
 
     private static func fetch(_ url: URL, key: String) async -> Fetched {
