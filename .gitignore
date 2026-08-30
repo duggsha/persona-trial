@@ -1,0 +1,15 @@
+# Build output — this is the 1GB of DerivedData, never commit it.
+build/
+.build/
+DerivedData/
+
+# Xcode per-user state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# SwiftPM
+.swiftpm/
+Package.resolved
+
+.DS_Store
