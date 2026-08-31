@@ -7,7 +7,7 @@ import PersonaCore
 enum MockHomeData {
     static let userName = "Tanay"
     static let assistantName = "Iris"
-    static let greeting = "Evening, Tanay — your inbox is quiet."
+    static let greeting = "Evening, Tanay."
     static let location = "San Francisco · 63°"
 
     private static func minutes(_ n: Int) -> Date { Date().addingTimeInterval(TimeInterval(n * 60)) }

@@ -674,12 +674,18 @@ struct HomeScreen: View, Equatable {
                 // for this moment lead the rail — shimmering ghosts while the
                 // writer works, scrolling in when they land; a pull-to-refresh
                 // regenerates them for wherever the moment has moved.
-                HomeChatShortcuts(
-                    onTap: handleQuickAction,
-                    personalized: home.chatShortcuts,
-                    isWriting: home.chatShortcutsPending
-                )
-                .padding(.top, 14)
+                // The shortcut rail sat between the greeting and the deck —
+                // three more pills of soft chrome on a surface whose job is
+                // now decisions. The starters still exist in the composer's
+                // + menu; the rail returns with -LEGACY_HOME.
+                if ProcessInfo.processInfo.arguments.contains("-LEGACY_HOME") {
+                    HomeChatShortcuts(
+                        onTap: handleQuickAction,
+                        personalized: home.chatShortcuts,
+                        isWriting: home.chatShortcutsPending
+                    )
+                    .padding(.top, 14)
+                }
 
                 // (The live-ride tracker, the sign-in park cards and the
                 // payment park cards all sat here in the real app. Each is
@@ -714,7 +720,17 @@ struct HomeScreen: View, Equatable {
                 // HomeStatusView instead).
                 // Gate on what can actually DRAW: the pinned codes and the deck
                 // are the only rows this section has.
-                if !pinnedUpdates.isEmpty || !feed.isEmpty || hasData {
+                // THE DESIGN TRIAL'S REDESIGN. The decision deck replaces the
+                // one-size-fits-all card list: asks, utilities and receipts each
+                // get their own anatomy, actions live on the card, stakes are
+                // printed with counted precedent, and standing rules are readable
+                // in Judgment. Launch with -LEGACY_HOME to compare against the
+                // shipped deck this trial started from.
+                if !ProcessInfo.processInfo.arguments.contains("-LEGACY_HOME") {
+                    DecisionDeck()
+                        .padding(.horizontal, DS.Spacing.gutter)
+                        .padding(.top, 21)
+                } else if !pinnedUpdates.isEmpty || !feed.isEmpty || hasData {
                     // Figma Home_Suggestions Horizontal: 10pt between cards.
                     // Lazy so the uncapped deck's off-screen cards (each a heavy
                     // SuggestionCard/UpdateCard with a swipe state machine) aren't

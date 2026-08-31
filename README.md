@@ -1,83 +1,74 @@
-# Persona — Design Trial
+# Iris — the decision deck
 
-A running iOS app that renders **two screens**: the Persona home feed and the
-chat transcript, paged between exactly as the app does. It is the real shipping
-SwiftUI code, not a remake — the same header, the same card views, the same
-bubbles, the same composer, laid out to the same numbers.
+Design trial for the Persona founding design engineer role. Base is the real
+Iris home screen ([tanaysingh1/persona-design-trial](https://github.com/tanaysingh1/persona-design-trial));
+everything described below is the redesign, live in this repo.
 
-It has no backend. Nothing it shows was fetched, and nothing it does is sent.
+## The read
 
-## Running it
+The brief said: make the actions obvious, make the context clear, make it
+beautiful — Jarvis, not soft.
+
+Looking at the shipped feed, the real problem wasn't styling. A sign-in code,
+a person waiting on an answer, and a flight that already moved were all
+wearing the same card: icon, two truncated lines, a blue dot, a chevron. No
+card said what you could do with it, and the one clause that mattered was cut
+mid-sentence.
+
+**Different kinds of things get different cards, and every card carries its
+actions.** That's the whole redesign.
+
+## The grammar
+
+**ASK** — the agent needs a yes. The ask is the headline, the context never
+truncates, and the stakes are printed, not implied: `HIGH STAKES · first send
+as you`, `LOW STAKES · 3 approvals · reversible`. Low stakes doesn't mean the
+action looks small — it means **precedent exists**. The draft it wants to send
+sits on the card, tap to edit. Decline and approve are right there; under the
+approve chevron sits the stronger yes — an **always-rule** — and saying always
+approves the current one too. Approving streams the agent's actual steps, then
+the card seals and files itself under HANDLED.
+
+**UTILITY** — the card is the action. The code is set in 34pt mono, the whole
+card copies it, and it visibly expires (a draining hairline and a countdown —
+a dead code is a lie, so it dims when it dies).
+
+**RECEIPT** — the agent already acted where it had standing. One line of what
+happened, the rule that authorised it (`RULE · KEEP TRAVEL PLANS CURRENT`),
+and a live **Undo**.
+
+**JUDGMENT** — every standing permission, readable as one sentence, counted
+(`USED 7×`), and deletable. Delete a rule and anything it authorised returns
+to the feed as a question. Nobody should hold a permission they can't read.
+
+The loop this closes: approve → it runs → receipt. Say always → the current
+one runs **and** later work of the same shape arrives already handled, tagged
+with the rule, undo intact. That's how trust actually graduates — the feed
+asks less every week, and never silently.
+
+## The look
+
+Dark-first (an operator's instrument commits), ink on near-black, hairlines
+instead of shadows, one accent (the filled action), SF Mono for every piece of
+metadata, radii at 14/8/6 continuous — deliberately sharper than the shipped
+28pt pills. Built entirely on the app's own `DS` tokens; light mode still
+resolves through them.
+
+## Run it
 
 ```
-xcodegen generate
 open PersonaDesignTrial.xcodeproj
 ```
 
-Build to any iOS 18+ simulator. There are no third-party dependencies to
-resolve, no signing to configure and no credentials to supply — a clone builds
-offline.
+iOS 18+ simulator, no backend, no signing. Launch args:
 
-## What's here
+- *(none)* — the redesign
+- `-LEGACY_HOME` — the shipped feed this started from
+- `-CARD_GRAMMAR` — the team's earlier grammar experiment, untouched
 
-```
-App/                    the whole trial-specific app (3 files)
-  PersonaTrialApp.swift   entry point; injects the four seeded stores
-  TrialEnvironment.swift  composition root
-  MockHomeData.swift      every word on screen — the feed AND the transcript
-Packages/
-  PersonaCore/            data models
-  PersonaDesign/          design tokens, palette, glass, assets
-  PersonaService/         local-only stores (no network layer)
-  PersonaUI/              the screens: header, card feed, transcript, composer
-```
+Everything works: approve/decline, edit the draft, always-rules, the
+7-second graduation card, tap-to-copy (check the clipboard), expiry, undo,
+and rule deletion re-opening the ask.
 
-To change the copy, the cards, the messages, the greeting or the persona's
-name, edit `App/MockHomeData.swift`. Nothing else reads content from anywhere.
-
-## Getting between the two pages
-
-Swipe left and right, or tap the house / speech-bubble toggle in the header —
-both drive the same pager, with the composer staying put across the transition
-because it is one shared bar.
-
-## What works, and what doesn't
-
-Both screens are fully interactive. Paging, scrolling, card expand and collapse,
-swipe-to-dismiss with its undo toast, the long-press menu, the attach menu's
-bloom, the transcript's swipe-to-reveal timestamps and jump-to-latest chevron,
-keyboard handling and every animation are the real thing.
-
-What's deliberately inert is anything that would have reached a server:
-
-| Gesture | What happens |
-| --- | --- |
-| Send | Clears the draft. Nothing is sent. |
-| Hold to talk | Records, then discards the clip. |
-| A card's action button | Reports failure — there is nothing behind it. |
-| Pull to refresh | Spins. The deck is fixed. |
-
-## How it was made
-
-The app was ported from the production tree and then reduced to what draws these
-two screens. Roughly 80% of the UI package and 95% of the service package were
-removed, along with every third-party dependency.
-
-`PersonaService` is a rewrite rather than a trimming: in the real app it is the
-network layer, and here it is ~1,000 lines of observable stores holding local
-state. There is no HTTP client, no session, no route and no credential in it.
-
-A handful of surfaces that live on these screens in the real app were cut with
-the backend they depend on, and are noted in the code where they were: the
-live-ride tracker, the sign-in and payment park cards, the empty-deck "connect an
-app" panel, the mail-compose and reminder sheets, the card's chat sheet, and the
-transcript's rich inline cards (a ride, an order, a link preview — every one of
-them a live surface). The Up Next meeting hero and the task dock are absent
-because they are switched off in the shipping app too.
-
-## One network call
-
-Contact and brand avatars are still fetched from third-party image CDNs
-(Gravatar, logo.dev, favicons) — the same path the real app uses. It is not the
-Persona backend, and with no network the cards fall back to monograms and SF
-Symbols. Everything else is local.
+New code is one file: `Packages/PersonaUI/Sources/PersonaUI/DecisionDeck.swift`.
+Screenshots in `shots/`.
