@@ -20,7 +20,8 @@ final class TrialEnvironment {
     init() {
         profile.seedForDesignTrial(
             name: MockHomeData.userName,
-            assistantName: MockHomeData.assistantName
+            assistantName: MockHomeData.assistantName,
+            avatarUrl: MockHomeData.accountAvatarUrl
         )
         home.seedForDesignTrial(
             greeting: MockHomeData.greeting,

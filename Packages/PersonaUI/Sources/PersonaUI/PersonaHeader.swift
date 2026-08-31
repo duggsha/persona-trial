@@ -24,6 +24,9 @@ struct PersonaHeader: View {
     var homeUnreadCount: Int = 0
     /// Opens the same Iris menu the former smile/orb button opened.
     var onLogo: () -> Void = {}
+    /// Opens Judgment — the standing rules. Lives in the header because the
+    /// rules govern every page, not just Home's deck.
+    var onJudgment: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
     // Optional: design-preview rigs mount the header without ProfileStore —
@@ -81,6 +84,18 @@ struct PersonaHeader: View {
                 .buttonStyle(.hapticTap)
                 .smallGlassCapsule()
                 .accessibilityIdentifier("header-page-toggle")
+
+                Button(action: onJudgment) {
+                    Image(systemName: "brain")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(DS.Palette.inkMuted)
+                        .frame(width: 42, height: 42)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.hapticTap)
+                .smallGlassCircle()
+                .accessibilityLabel("Judgment")
+                .padding(.leading, 8)
             }
 
             // The wordmark's glass is SCROLL-DRIVEN on Home: at the resting
@@ -221,6 +236,9 @@ private struct HeaderMenuFace: View {
         self.avatarUrl = avatarUrl
         // Seed the avatar SYNCHRONOUSLY from the cache so a recreated header
         // shows the face from its first frame. The chrome is rebuilt via an
+        // A trial-only lane: an "asset:" avatar renders from the design
+        // bundle, so the face never depends on the network this build
+        // doesn't really have.
         // `.id(...)` swap on every Iris-menu mount/unmount (the stale-presentation
         // safety), which resets this @State to nil — the async `.task` cache
         // read then flashed the hamburger glyph for a frame and morphed the
@@ -236,7 +254,14 @@ private struct HeaderMenuFace: View {
 
     var body: some View {
         Group {
-            if let image {
+            if let asset = avatarUrl, asset.hasPrefix("asset:") {
+                PersonaAsset.image(String(asset.dropFirst("asset:".count)))
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFill()
+                    .frame(width: 42, height: 42)
+                    .clipShape(Circle())
+            } else if let image {
                 // Full-bleed in the 42pt disc: the photo IS the button — no
                 // visible glass rim or stroke around it.
                 image

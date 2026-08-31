@@ -727,9 +727,10 @@ struct HomeScreen: View, Equatable {
                 // in Judgment. Launch with -LEGACY_HOME to compare against the
                 // shipped deck this trial started from.
                 if !ProcessInfo.processInfo.arguments.contains("-LEGACY_HOME") {
+                    // Full width: the deck's cards share LEFT/RIGHT edges with
+                    // the composer bar — one column, one grid.
                     DecisionDeck()
-                        .padding(.horizontal, DS.Spacing.gutter)
-                        .padding(.top, 21)
+                        .padding(.top, 18)
                 } else if !pinnedUpdates.isEmpty || !feed.isEmpty || hasData {
                     // Figma Home_Suggestions Horizontal: 10pt between cards.
                     // Lazy so the uncapped deck's off-screen cards (each a heavy

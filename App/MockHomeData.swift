@@ -5,9 +5,11 @@ import PersonaCore
 /// stores are pinned to these values at launch and never refresh, which is what
 /// lets the trial run with the network off entirely.
 enum MockHomeData {
-    static let userName = "Tanay"
+    static let userName = "Shaurya"
     static let assistantName = "Iris"
-    static let greeting = "Evening, Tanay."
+    static let greeting = "Welcome back, Shaurya."
+    /// The signed-in account's photo (the header face and the sidebar row).
+    static let accountAvatarUrl = "asset:AvatarShaurya"
     static let location = "San Francisco · 63°"
 
     private static func minutes(_ n: Int) -> Date { Date().addingTimeInterval(TimeInterval(n * 60)) }
@@ -48,18 +50,15 @@ enum MockHomeData {
             ))
         }
 
-        turn("morning — anything I should know before the design review?", true, 96)
-        turn("Priya moved it to 6:30 and asked for the card grammar decision in writing beforehand.", false, 95)
-        turn("She also forwarded the deck from last quarter. Want me to pull the three slides that changed?", false, 95)
-        turn("yes please", true, 93)
-        turn("Got them. The changes are all in the expanded state — the action row went from three buttons to one, the evidence line moved above the fold, and the mic lost its ring.", false, 92)
-        turn("that last one was deliberate", true, 90)
-        turn("Noted. I'll say so in the summary rather than listing it as a regression.", false, 89)
+        turn("get me 30 minutes with jason this week", true, 96)
+        turn("Held Wednesday 3:30. The invite is in your feed — approve it and it sends.", false, 95)
+        turn("book dinner tonight if marufuku has anything", true, 93)
+        turn("They have a 7:45 — two counter seats. It's holding in your feed, free cancel until 6.", false, 92)
         // A gap, so the transcript shows its day/time separator behaviour.
-        turn("did sarah ever get back about thursday?", true, 14)
-        turn("Not yet. Her last message was this morning asking whether 2pm still works — it's sitting at the top of your feed.", false, 13)
-        turn("Want me to hold the slot until she answers?", false, 13)
-        turn("hold it till 5", true, 4, delivered: true, read: true)
+        turn("send sarah the thursday reply", true, 14)
+        turn("Sent as you — Thursday 2 PM confirmed. The receipt is under Handled.", false, 13)
+        turn("whats left tonight?", true, 4, delivered: true, read: true)
+        turn("Two asks — Jason's slot and the table. Your GitHub code has 9 minutes left.", false, 3)
         return out
     }()
 

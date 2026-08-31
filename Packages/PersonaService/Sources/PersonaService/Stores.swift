@@ -26,10 +26,10 @@ public final class ProfileStore {
         return String(first).uppercased()
     }
 
-    public func seedForDesignTrial(name: String, assistantName: String) {
+    public func seedForDesignTrial(name: String, assistantName: String, avatarUrl: String? = nil) {
         self.name = name
         self.assistantName = assistantName
-        avatarUrl = nil
+        self.avatarUrl = avatarUrl
     }
 }
 

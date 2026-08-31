@@ -28,6 +28,8 @@ public struct DesignTrialHost: View {
     /// Which page is showing. Driven by the header's toggle AND by the pager's
     /// own swipe, exactly as in the app.
     @State private var page: PersonaPage = .home
+    /// The menu button's slide-over.
+    @State private var sidebarOpen = false
     /// Live horizontal drag distance while a page swipe is in flight.
     @State private var dragX: CGFloat = 0
     /// Latched once a drag is decisively horizontal: the pages' vertical
@@ -59,7 +61,9 @@ public struct DesignTrialHost: View {
                 PersonaHeader(
                     page: $page,
                     homeScrolled: page == .home && scrolledUnderHeader,
-                    avatarUrl: profile.avatarUrl
+                    avatarUrl: profile.avatarUrl,
+                    onLogo: { sidebarOpen = true },
+                    onJudgment: { DecisionEngine.shared.judgmentShown = true }
                 )
                 .frame(maxHeight: .infinity, alignment: .top)
 
@@ -69,6 +73,21 @@ public struct DesignTrialHost: View {
                 // behaves, nothing is delivered.
                 bottomComposer(keyboardUp: geo.safeAreaInsets.bottom > 100)
                     .frame(maxHeight: .infinity, alignment: .bottom)
+
+                // The menu button's actual destination. Above everything —
+                // header included — because it IS the navigation.
+                TrialSidebar(
+                    isOpen: $sidebarOpen,
+                    page: page,
+                    onHome: { withAnimation(DS.Motion.page) { page = .home } },
+                    onChat: { showChat() },
+                    onJudgment: { DecisionEngine.shared.judgmentShown = true }
+                )
+            }
+            .sheet(isPresented: Bindable(DecisionEngine.shared).judgmentShown) {
+                JudgmentSheet()
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.hidden)
             }
         }
     }

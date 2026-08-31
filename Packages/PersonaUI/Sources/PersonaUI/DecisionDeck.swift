@@ -28,8 +28,8 @@ private enum DK {
     static let cardRadius: CGFloat = 14
     static let wellRadius: CGFloat = 8
     static let chipRadius: CGFloat = 6
-    static let pad: CGFloat = 16
-    static let gap: CGFloat = 10
+    static let pad: CGFloat = 18
+    static let gap: CGFloat = 12
 }
 
 // MARK: Model
@@ -107,6 +107,11 @@ struct DeckRule: Identifiable, Equatable {
 
 @MainActor @Observable
 final class DecisionEngine {
+    /// One engine for the whole app: the deck renders it, the header and the
+    /// sidebar open its Judgment, and the sheet lives on the host so it can
+    /// present from either page.
+    static let shared = DecisionEngine()
+
     var items: [DeckItem] = []
     var rules: [DeckRule] = [
         DeckRule(sentence: "Keep travel plans current", scope: "Calendar", uses: 7),
@@ -127,7 +132,7 @@ final class DecisionEngine {
         items = [
             DeckItem(
                 kind: "code",
-                source: "GITHUB · SIGN-IN",
+                source: "GITHUB",
                 sourceSymbol: "key.fill",
                 ask: "", context: "Tap to copy",
                 createdAgo: "1m",
@@ -136,7 +141,7 @@ final class DecisionEngine {
             ),
             DeckItem(
                 kind: "send_draft",
-                source: "MAIL · SARAH WHITFIELD",
+                source: "SARAH WHITFIELD · MAIL",
                 sourceSymbol: "envelope.fill",
                 avatarAsset: "AvatarSarah",
                 ask: "Confirm Thursday with Sarah?",
@@ -155,11 +160,11 @@ final class DecisionEngine {
             ),
             DeckItem(
                 kind: "create_meeting",
-                source: "MAIL · JASON MEHTA",
+                source: "JASON MEHTA · MAIL",
                 sourceSymbol: "calendar",
                 avatarAsset: "AvatarJason",
                 ask: "Give Jason 30 minutes Wednesday?",
-                context: "Firmware timeline. Your Wednesday is open after 3.",
+                context: "Firmware timeline. Wednesday is open after 3.",
                 facts: "WED · 3:30 – 4:00 PM · INVITE TO JASON",
                 stakes: .low("3 approvals · reversible"),
                 primaryLabel: "Book 3:30",
@@ -174,11 +179,11 @@ final class DecisionEngine {
             ),
             DeckItem(
                 kind: "place",
-                source: "RESY · SAVED PLACE",
+                source: "RESY",
                 sourceSymbol: "fork.knife",
                 ask: "Take the 7:45 at Marufuku?",
-                context: "Two counter seats — the last slot before 9. You're free after the review.",
-                facts: "TONIGHT · 7:45 PM · 2 SEATS · FREE CANCEL TO 6",
+                context: "Two counter seats — the last slot before 9.",
+                facts: "TONIGHT · 7:45 · FREE CANCEL TO 6",
                 stakes: .low("booked twice · free cancel"),
                 primaryLabel: "Book it",
                 alwaysSentence: "Always grab tables at places I've saved",
@@ -191,10 +196,10 @@ final class DecisionEngine {
             ),
             DeckItem(
                 kind: "update",
-                source: "DELTA · DL 1187",
+                source: "DELTA 1187",
                 sourceSymbol: "airplane.departure",
                 ask: "Move your Austin flight alarm?",
-                context: "Departure moved up 40 minutes. New wheels-up 9:05 AM, gate unchanged.",
+                context: "Moved up 40 minutes. Gate unchanged.",
                 facts: "SFO → AUS · 9:05 AM · GATE C11",
                 primaryLabel: "Update calendar",
                 steps: [DeckRunStep(symbol: "calendar", text: "Calendar moved to 9:05")],
@@ -253,7 +258,7 @@ final class DecisionEngine {
             }
             let born = DeckItem(
                 kind: "send_draft",
-                source: "MAIL · PRIYA NAIR",
+                source: "PRIYA NAIR · MAIL",
                 sourceSymbol: "envelope.fill",
                 ask: "Reply to Priya about the deck?",
                 context: "She asked for the three changed slides before the review.",
@@ -291,7 +296,7 @@ final class DecisionEngine {
 // MARK: - Deck root
 
 public struct DecisionDeck: View {
-    @State private var engine = DecisionEngine()
+    private let engine = DecisionEngine.shared
 
     public init() {}
 
@@ -326,11 +331,6 @@ public struct DecisionDeck: View {
         .animation(.smooth(duration: 0.34), value: engine.items.map(\.id))
         .animation(.smooth(duration: 0.34), value: engine.handled.map(\.id))
         .onAppear { engine.seed() }
-        .sheet(isPresented: Bindable(engine).judgmentShown) {
-            JudgmentSheet(engine: engine)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.hidden)
-        }
     }
 
     private func deckHeader(count: Int) -> some View {
@@ -457,11 +457,11 @@ private struct AskCard: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.ask)
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(.system(size: 23, weight: .semibold))
                         .foregroundStyle(DS.Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(item.context)
-                        .font(.system(size: 14.5))
+                        .font(.system(size: 16))
                         .foregroundStyle(DS.Palette.subtle)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -497,7 +497,7 @@ private struct AskCard: View {
             if editingDraft {
                 TextEditor(text: Binding(get: { item.draft ?? "" }, set: { item.draft = $0 }))
                     .focused($draftFocused)
-                    .font(.system(size: 14))
+                    .font(.system(size: 15))
                     .foregroundStyle(DS.Palette.ink)
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 64, maxHeight: 120)
@@ -517,7 +517,7 @@ private struct AskCard: View {
                     HStack(alignment: .top, spacing: 8) {
                         Rectangle().fill(DS.Palette.hairline).frame(width: 2)
                         Text(item.draft ?? "")
-                            .font(.system(size: 14))
+                            .font(.system(size: 15))
                             .foregroundStyle(DS.Palette.inkMuted)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -538,10 +538,10 @@ private struct AskCard: View {
         HStack(spacing: 8) {
             Button { engine.decline(item) } label: {
                 Text(item.declineLabel)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 15.5, weight: .medium))
                     .foregroundStyle(DS.Palette.inkMuted)
-                    .frame(height: 40)
-                    .padding(.horizontal, 14)
+                    .frame(height: 48)
+                    .padding(.horizontal, 16)
                     .background(DS.Palette.surfaceMuted,
                                 in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
@@ -556,10 +556,10 @@ private struct AskCard: View {
                     _ = DSHaptics.tap(.rigid)
                 } label: {
                     Text(item.primaryLabel)
-                        .font(.system(size: 14.5, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(DS.Palette.onInk)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 40)
+                        .frame(height: 48)
                 }
                 .buttonStyle(.plain)
 
@@ -571,7 +571,7 @@ private struct AskCard: View {
                         Image(systemName: "chevron.up")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(DS.Palette.onInk.opacity(0.85))
-                            .frame(width: 36, height: 40)
+                            .frame(width: 40, height: 48)
                             .rotationEffect(.degrees(alwaysOpen ? 180 : 0))
                     }
                     .buttonStyle(.plain)
@@ -627,7 +627,7 @@ private struct AskCard: View {
                         .background(DS.Palette.surfaceMuted,
                                     in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     Text(step.text)
-                        .font(.system(size: 13, weight: state == 1 ? .semibold : .regular))
+                        .font(.system(size: 14.5, weight: state == 1 ? .semibold : .regular))
                         .foregroundStyle(state == 0 ? DS.Palette.placeholder : DS.Palette.inkMuted)
                     if state == 1 {
                         ProgressView().controlSize(.mini).tint(DS.Palette.subtle)
@@ -666,7 +666,7 @@ private struct CodeCard: View {
                         SourceRow(item: item)
                         HStack(alignment: .firstTextBaseline) {
                             Text(item.code ?? "")
-                                .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                                .font(.system(size: 40, weight: .semibold, design: .monospaced))
                                 .kerning(2)
                                 .foregroundStyle(expired ? DS.Palette.placeholder : DS.Palette.ink)
                                 .contentTransition(.opacity)
@@ -716,7 +716,7 @@ private struct ReceiptCard: View {
                         .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.receiptLine)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 15.5, weight: .medium))
                         .foregroundStyle(DS.Palette.inkMuted)
                         .fixedSize(horizontal: false, vertical: true)
                     if let rule = item.ranUnderRule {
@@ -745,8 +745,8 @@ private struct ReceiptCard: View {
 
 // MARK: - Judgment
 
-private struct JudgmentSheet: View {
-    let engine: DecisionEngine
+struct JudgmentSheet: View {
+    var engine: DecisionEngine = .shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
