@@ -51,6 +51,22 @@ struct PersonaHeader: View {
                 .accessibilityLabel("Open menu")
                 .accessibilityIdentifier("header-menu")
 
+                // Judgment sits on the LEFT, beside the avatar. Two controls
+                // on the right against one on the left pushed the wordmark
+                // visually off-centre even though it was mathematically
+                // centred; balancing the ends fixes the mark for free.
+                Button(action: onJudgment) {
+                    Image(systemName: "brain")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(DS.Palette.inkMuted)
+                        .frame(width: 42, height: 42)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.hapticTap)
+                .smallGlassCircle()
+                .accessibilityLabel("Judgment")
+                .padding(.leading, 8)
+
                 Spacer(minLength: 0)
 
                 // Each half navigates to ITS page. It read as a toggle before,
@@ -94,17 +110,6 @@ struct PersonaHeader: View {
                 .smallGlassCapsule()
                 .accessibilityIdentifier("header-page-toggle")
 
-                Button(action: onJudgment) {
-                    Image(systemName: "brain")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(DS.Palette.inkMuted)
-                        .frame(width: 42, height: 42)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.hapticTap)
-                .smallGlassCircle()
-                .accessibilityLabel("Judgment")
-                .padding(.leading, 8)
             }
 
             // The wordmark keeps its glass at all times. It used to appear

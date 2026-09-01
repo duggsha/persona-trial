@@ -156,7 +156,7 @@ final class DecisionEngine {
                 kind: "send_draft", source: "SARAH WHITFIELD · MAIL", logo: .mail,
                 avatarAsset: "AvatarSarah",
                 ask: "Confirm Thursday with Sarah?",
-                context: "She needs an answer before she books the room.",
+                context: "",
                 incoming: "Does Thursday still work for the walkthrough? I have to book the room today.",
                 draft: "Thursday still works. 2pm at your office? I'll bring the printed boards.",
                 primaryLabel: "Send reply",
@@ -340,7 +340,7 @@ struct DeckScreen: View {
                     pager
                     greetingRow
                         .padding(.horizontal, DK.gutter)
-                        .padding(.top, 62)
+                        .padding(.top, 72)
                         .opacity(atFirstCard ? 1 : 0)
                         .animation(.smooth(duration: 0.22), value: atFirstCard)
                         .allowsHitTesting(atFirstCard)
@@ -667,17 +667,11 @@ private struct AskCard: View {
                     // Their words first. You cannot judge a reply without the
                     // sentence it answers.
                     if let incoming = item.incoming {
-                        HStack(alignment: .top, spacing: 9) {
-                            Rectangle()
-                                .fill(DS.Palette.hairline)
-                                .frame(width: 1)
-                            Text(incoming)
-                                .font(.system(size: 13.5, weight: .light))
-                                .italic()
-                                .foregroundStyle(DS.Palette.placeholder)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .fixedSize(horizontal: false, vertical: true)
+                        Text(incoming)
+                            .font(.system(size: 13.5, weight: .light))
+                            .italic()
+                            .foregroundStyle(DS.Palette.placeholder)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -686,10 +680,12 @@ private struct AskCard: View {
                             .tracking(-0.3)
                             .foregroundStyle(DS.Palette.ink)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(item.context)
-                            .font(.system(size: 16.5, weight: .light))
-                            .foregroundStyle(DS.Palette.subtle)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if !item.context.isEmpty {
+                            Text(item.context)
+                                .font(.system(size: 16.5, weight: .light))
+                                .foregroundStyle(DS.Palette.subtle)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     if let facts = item.facts {
@@ -724,10 +720,9 @@ private struct AskCard: View {
                 // acts on your behalf should always be able to show its work
                 // without being asked — one dense line, no prose.
                 if !item.trail.isEmpty, !running {
-                    LedgerLine()
                     TrailLine(steps: item.trail)
                         .padding(.horizontal, DK.pad)
-                        .padding(.vertical, 9)
+                        .padding(.bottom, 11)
                 }
 
                 LedgerLine()
