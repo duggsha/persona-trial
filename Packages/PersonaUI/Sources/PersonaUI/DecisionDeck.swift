@@ -352,18 +352,16 @@ struct DeckScreen: View {
     private var pager: some View {
         GeometryReader { geo in
             let height = geo.size.height
-            // The focused card owns the screen; the neighbours' 25% keeps the
-            // stack legible. Slot + two peeks + two gaps = the viewport.
-            let slot = height * 0.70
-            // The focused card starts right under the controls; almost all of
-            // the spare height goes below it, so the next card's head reads
-            // and the previous card keeps a sliver above.
-            // The stack rides high: the focused card sits just under the
-            // header, the previous card keeps a sliver, and the next card's
-            // head takes the rest of the spare height.
-            let spare = height - slot
-            let topMargin: CGFloat = 10
-            let bottomMargin = spare - topMargin
+            // The focused card owns the screen; the neighbours split what is
+            // left, so both are visibly there without competing for the eye.
+            let slot = height * 0.66
+            // The peek has to come from ANCHORING, not from insetting.
+            // viewAligned snaps the focused card's TOP edge to the top content
+            // inset, so an asymmetric top margin was dead space and the
+            // previous card scrolled clean out of frame. Symmetric margins let
+            // the first and last cards reach the same resting place; the
+            // anchor decides what shows around the focused one.
+            let margin = (height - slot) / 2
 
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 10) {
@@ -411,11 +409,13 @@ struct DeckScreen: View {
                 .scrollTargetLayout()
                 .padding(.horizontal, DK.gutter)
             }
-            .scrollPosition(id: $focused)
+            // Anchored just above centre: the card sits high enough to clear
+            // the floating composer, and BOTH neighbours stay on screen —
+            // the previous card's tail above, the next card's head below.
+            .scrollPosition(id: $focused, anchor: UnitPoint(x: 0.5, y: 0.44))
             // One card per gesture, even on an over-scroll.
             .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
-            .contentMargins(.top, topMargin, for: .scrollContent)
-            .contentMargins(.bottom, bottomMargin, for: .scrollContent)
+            .contentMargins(.vertical, margin, for: .scrollContent)
             .animation(.smooth(duration: 0.34), value: engine.asks.map(\.id))
         }
     }
@@ -460,6 +460,12 @@ private struct SourceRow: View {
                     .resizable().scaledToFill()
                     .frame(width: 24, height: 24)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(alignment: .bottomTrailing) {
+                        IrisLogoTile(logo: item.logo, size: 12)
+                            .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .strokeBorder(DS.Palette.card, lineWidth: 1.5))
+                            .offset(x: 4, y: 4)
+                    }
             } else {
                 IrisLogoTile(logo: item.logo, size: 24)
             }
@@ -825,7 +831,14 @@ private struct ReceiptRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            IrisLogoTile(logo: .check, size: 20)
+            // The app that actually did it, with a tick riding its corner.
+            IrisLogoTile(logo: item.logo, size: 22)
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(DS.Palette.ink, DS.Palette.success)
+                        .offset(x: 3, y: 3)
+                }
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.receiptLine)
                     .font(.system(size: 15, weight: .regular))

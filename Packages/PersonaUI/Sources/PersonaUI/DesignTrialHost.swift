@@ -62,6 +62,20 @@ public struct DesignTrialHost: View {
 
                 pager(width: geo.size.width, safeHeight: geo.size.height)
 
+                // The header floats, so content has to DISSOLVE into it rather
+                // than collide with it. Without this the transcript's bubbles
+                // ran straight through the wordmark. Instrument, not accident.
+                HeaderScrim(safeTop: geo.safeAreaInsets.top)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .allowsHitTesting(false)
+
+                // The same courtesy at the other end: the composer floats too,
+                // and a card sliding under it should fade, not collide.
+                FooterScrim(safeBottom: geo.safeAreaInsets.bottom)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .ignoresSafeArea(edges: .bottom)
+                    .allowsHitTesting(false)
+
                 // The floating glass header rides on top of both pages.
                 PersonaHeader(
                     page: $page,
@@ -71,6 +85,14 @@ public struct DesignTrialHost: View {
                     onJudgment: { DecisionEngine.shared.judgmentShown = true }
                 )
                 .frame(maxHeight: .infinity, alignment: .top)
+
+                // Voice mode, over everything: it hears, it works, and the
+                // engine it drives is the same one the feed is reading.
+                if voiceShown {
+                    VoiceOverlay(onFinish: completeVoiceFlow)
+                        .transition(.opacity)
+                        .zIndex(10)
+                }
 
                 // The composer is ONE shared bar across both pages — it stays
                 // put as you swipe, which is why it lives outside the pager.
@@ -130,7 +152,8 @@ public struct DesignTrialHost: View {
 
             ChatScreen(
                 messages: chatLog.isEmpty ? messages : chatLog,
-                toolTrails: chatTrails,
+                // Seeded work + anything the live voice flow has since added.
+                toolTrails: seededTrails.merging(chatTrails) { _, live in live },
                 scrollTick: chatScrollTick,
                 onDismissKeyboard: { composerFocused = false }
             )
@@ -246,11 +269,13 @@ public struct DesignTrialHost: View {
                 // Dead on purpose: a released memo is dropped, not uploaded.
                 onVoiceMessage: { url, _ in
                     try? FileManager.default.removeItem(at: url)
-                    // Voice mode: the release IS the ask. The overlay hears,
-                    // the engine does the work for real, the transcript gets
-                    // the turn, the trail, and the answer.
-                    voiceShown = true
                 },
+                // Voice mode opens on the HOLD, not the release: the overlay
+                // has to be up while you're still speaking. (It also means the
+                // flow is reachable on a simulator, which has no microphone —
+                // a release-triggered HUD would never once appear in Xcode.)
+                onListeningBegan: { voiceShown = true },
+                voiceHandledExternally: true,
                 onCamera: {},
                 onPhotoLibrary: {},
                 onAttachFile: {},
@@ -286,5 +311,92 @@ public struct DesignTrialHost: View {
 private struct PagerHorizontalClip: Shape {
     func path(in rect: CGRect) -> Path {
         Path(CGRect(x: rect.minX, y: -10_000, width: rect.width, height: 20_000))
+    }
+}
+
+// MARK: - The work behind the seeded replies
+
+extension DesignTrialHost {
+    /// Every assistant turn in the transcript got there by doing something.
+    /// These are those steps, keyed by the reply they produced and matched on
+    /// text so the App target keeps owning the transcript itself.
+    var seededTrails: [UUID: ChatToolTrail] {
+        var out: [UUID: ChatToolTrail] = [:]
+        for message in messages where !message.isUser {
+            if message.text.hasPrefix("Held Wednesday") {
+                out[message.id] = ChatToolTrail(summary: "Worked 6s · 3 steps", steps: [
+                    .init(logo: .mail, label: "Read Jason's thread",
+                          detail: "3 messages · firmware timeline"),
+                    .init(logo: .calendar, label: "Compared both calendars",
+                          detail: "Wed 15:30–16:00 open for two"),
+                    .init(logo: .calendar, label: "Held the slot",
+                          detail: "invite drafted — not sent")
+                ])
+            } else if message.text.hasPrefix("They have a 7:45") {
+                out[message.id] = ChatToolTrail(summary: "Worked 4s · 2 steps", steps: [
+                    .init(logo: .resy, label: "Checked Marufuku",
+                          detail: "7:45 PM · 2 counter seats"),
+                    .init(logo: .resy, label: "Put a hold on it",
+                          detail: "free cancel until 6:00 PM")
+                ])
+            } else if message.text.hasPrefix("Sent as you") {
+                out[message.id] = ChatToolTrail(summary: "Worked 3s · 2 steps", steps: [
+                    .init(logo: .mail, label: "Wrote the reply as you",
+                          detail: "matched your last 40 sent messages"),
+                    .init(logo: .check, label: "Sent to Sarah Whitfield",
+                          detail: "Thursday 2:00 PM confirmed")
+                ])
+            } else if message.text.hasPrefix("Two asks") {
+                out[message.id] = ChatToolTrail(summary: "Worked 2s · 3 steps", steps: [
+                    .init(logo: .iris, label: "Swept the feed",
+                          detail: "2 asking · 1 expiring"),
+                    .init(logo: .github, label: "Checked the code's clock",
+                          detail: "9m 04s remaining"),
+                    .init(logo: .calendar, label: "Confirmed nothing else lands tonight", detail: nil)
+                ])
+            }
+        }
+        return out
+    }
+}
+
+// MARK: - The fade that keeps content out of the chrome
+
+/// A canvas-coloured fall-off under the floating header. Opaque through the
+/// chrome, gone 44pt later — so a bubble or a card slides UNDER the wordmark
+/// and disappears instead of printing through it.
+struct HeaderScrim: View {
+    let safeTop: CGFloat
+
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: DS.Palette.canvas, location: 0),
+                .init(color: DS.Palette.canvas, location: 0.62),
+                .init(color: DS.Palette.canvas.opacity(0.86), location: 0.78),
+                .init(color: DS.Palette.canvas.opacity(0), location: 1)
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        .frame(height: safeTop + 96)
+        .ignoresSafeArea(edges: .top)
+    }
+}
+
+/// HeaderScrim's opposite number, under the floating composer.
+struct FooterScrim: View {
+    let safeBottom: CGFloat
+
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: DS.Palette.canvas.opacity(0), location: 0),
+                .init(color: DS.Palette.canvas.opacity(0.86), location: 0.28),
+                .init(color: DS.Palette.canvas, location: 0.46),
+                .init(color: DS.Palette.canvas, location: 1)
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        .frame(height: safeBottom + 118)
     }
 }

@@ -574,6 +574,14 @@ struct PersonaComposer: View {
     /// Called with the recorded clip + its duration once a memo is released/sent.
     /// Ownership of the file passes to the caller (it uploads, then may delete it).
     let onVoiceMessage: (URL, TimeInterval) -> Void
+    /// Fired the instant the hold takes and recording starts — BEFORE any audio
+    /// exists. Voice mode hangs off this, not off the release, because the HUD
+    /// belongs on screen while you're still talking.
+    var onListeningBegan: (() -> Void)?
+    /// When something else owns the hold (voice mode), the memo recorder stands
+    /// down entirely instead of racing it — otherwise the bar reports "didn't
+    /// catch that" underneath a voice flow that plainly worked.
+    var voiceHandledExternally = false
     var hasAttachment = false
     /// Staged photos rendered INSIDE the input capsule (iMessage-style), each
     /// with its remove control — up to 5; the row scrolls when they overflow.
@@ -1548,6 +1556,8 @@ struct PersonaComposer: View {
 
     private func beginVoiceMemoMode() {
         guard voiceMemoMode == .idle, !hasText else { return }
+        onListeningBegan?()
+        if voiceHandledExternally { return }
         closeAttachMenu()
         // A hold can start with the keyboard — and so the Paste pill — still
         // up: recording is the answer to "what do I do with this bar", so the
