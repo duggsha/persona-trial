@@ -1108,7 +1108,7 @@ private struct MailReply: View {
                     .foregroundStyle(DS.Palette.inkMuted)
                 Spacer(minLength: 0)
             }
-            .frame(height: 30)
+            .padding(.vertical, 11)
 
             Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
 
@@ -1118,14 +1118,14 @@ private struct MailReply: View {
                     .kerning(1)
                     .foregroundStyle(DS.Palette.placeholder)
                     .frame(width: 26, alignment: .leading)
-                    .padding(.top, 11)
+                    .padding(.top, 2)
                 Text(incoming)
                     .font(.system(size: 14, weight: .light))
                     .foregroundStyle(DS.Palette.subtle)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, 9)
                 Spacer(minLength: 0)
             }
+            .padding(.vertical, 11)
 
             Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
 
@@ -1143,7 +1143,7 @@ private struct MailReply: View {
             .font(.system(size: 17))
             .foregroundStyle(DS.Palette.ink)
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.vertical, 12)
+            .padding(.vertical, 11)
         }
     }
 }
@@ -1457,15 +1457,24 @@ private struct AskCard: View {
             }
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.74), value: alwaysOpen)
-        // Anywhere off the menu closes it.
-        .overlay {
+        // The menu belongs to the CARD, not to the button: an overlay that
+        // escapes its parent's bounds is drawn but never touched.
+        .overlay(alignment: .bottomTrailing) {
             if alwaysOpen {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.snappy(duration: 0.2)) { alwaysOpen = false }
-                    }
-                    .zIndex(-1)
+                ZStack(alignment: .bottomTrailing) {
+                    // Anywhere off the menu closes it.
+                    Color.black.opacity(0.001)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.snappy(duration: 0.2)) { alwaysOpen = false }
+                        }
+                    scopeMenu
+                        .frame(width: 300)
+                        .padding(.trailing, 12)
+                        .padding(.bottom, 78)
+                        .transition(.scale(scale: 0.9, anchor: .bottomTrailing)
+                            .combined(with: .opacity))
+                }
             }
         }
     }
@@ -1552,15 +1561,6 @@ private struct AskCard: View {
                     }
                 }
                 .glassSurface(radius: DK.wellRadius)
-                .overlay(alignment: .bottomTrailing) {
-                    if alwaysOpen {
-                        scopeMenu
-                            .frame(width: 300)
-                            .alignmentGuide(.bottom) { $0[.top] - 8 }
-                            .transition(.scale(scale: 0.9, anchor: .bottomTrailing)
-                                .combined(with: .opacity))
-                    }
-                }
             }
         }
     }
@@ -1621,15 +1621,6 @@ private struct AskCard: View {
             // The menu FLOATS above the caret rather than sitting in the
             // layout: expanding it inside the row grew the card past its own
             // slot and pushed the whole deck out of alignment.
-            .overlay(alignment: .bottomTrailing) {
-                if alwaysOpen {
-                    scopeMenu
-                        .frame(width: 300)
-                        .alignmentGuide(.bottom) { $0[.top] - 8 }
-                        .transition(.scale(scale: 0.9, anchor: .bottomTrailing)
-                            .combined(with: .opacity))
-                }
-            }
         }
     }
 
