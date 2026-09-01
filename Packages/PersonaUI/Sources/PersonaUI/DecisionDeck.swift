@@ -301,8 +301,8 @@ struct DeckScreen: View {
     private var greetingRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text("Welcome back, Shaurya.")
-                .font(DS.Typography.greeting)
-                .tracking(-0.24)
+                .font(.system(size: 28, weight: .thin))
+                .tracking(-0.2)
                 .foregroundStyle(DS.Palette.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -357,11 +357,12 @@ struct DeckScreen: View {
             // The focused card starts right under the controls; almost all of
             // the spare height goes below it, so the next card's head reads
             // and the previous card keeps a sliver above.
-            // Equal peeks: every focused card shows the same share of the
-            // previous card's tail and the next card's head.
+            // The stack rides high: the focused card sits just under the
+            // header, the previous card keeps a sliver, and the next card's
+            // head takes the rest of the spare height.
             let spare = height - slot
-            let topMargin = spare / 2
-            let bottomMargin = spare / 2
+            let topMargin: CGFloat = 10
+            let bottomMargin = spare - topMargin
 
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 10) {
@@ -436,8 +437,12 @@ private struct DeckPlate<Content: View>: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(DS.Palette.card,
-                        in: RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
+            // One surface: frosted dark glass over the canvas. No inner fills
+            // anywhere — structure comes from the hairline strata, never from
+            // patches of a second grey.
+            .background(DS.Palette.card.opacity(0.42))
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous)
                 .strokeBorder(emphasized ? DS.Palette.hairline : DS.Palette.hairlineSoft,
                               lineWidth: 1))
@@ -492,11 +497,12 @@ private struct AskCard: View {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(item.ask)
-                            .font(.system(size: 26, weight: .semibold))
+                            .font(.system(size: 28, weight: .light))
+                            .tracking(-0.3)
                             .foregroundStyle(DS.Palette.ink)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(item.context)
-                            .font(.system(size: 16.5))
+                            .font(.system(size: 16.5, weight: .light))
                             .foregroundStyle(DS.Palette.subtle)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -551,8 +557,6 @@ private struct AskCard: View {
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 70, maxHeight: 130)
                     .padding(10)
-                    .background(DS.Palette.surfaceMuted,
-                                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
                         .strokeBorder(DS.Palette.hairline, lineWidth: 1))
                     .onAppear { draftFocused = true }
@@ -573,8 +577,8 @@ private struct AskCard: View {
                             .foregroundStyle(DS.Palette.placeholder)
                     }
                     .padding(10)
-                    .background(DS.Palette.surfaceMuted,
-                                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                        .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
             }
@@ -590,10 +594,8 @@ private struct AskCard: View {
                         .foregroundStyle(DS.Palette.inkMuted)
                         .frame(height: 50)
                         .padding(.horizontal, 16)
-                        .background(DS.Palette.surfaceMuted,
-                                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                            .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
+                            .strokeBorder(DS.Palette.hairline, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
 
@@ -654,7 +656,7 @@ private struct AskCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(DS.Palette.surface,
+            .background(.ultraThinMaterial,
                         in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
                 .strokeBorder(DS.Palette.hairline, lineWidth: 1))
@@ -846,8 +848,8 @@ private struct ReceiptRow: View {
             .buttonStyle(.plain)
         }
         .padding(12)
-        .background(DS.Palette.surfaceMuted,
-                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+            .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
     }
 }
 
@@ -959,7 +961,7 @@ private struct BriefAskRow: View {
                             .foregroundStyle(DS.Palette.inkMuted)
                             .frame(height: 36)
                             .padding(.horizontal, 12)
-                            .background(DS.Palette.card,
+                            .background(Color.white.opacity(0.05),
                                         in: RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous)
                                 .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
@@ -979,7 +981,7 @@ private struct BriefAskRow: View {
             }
         }
         .padding(12)
-        .background(DS.Palette.surfaceMuted,
+        .background(Color.white.opacity(0.035),
                     in: RoundedRectangle(cornerRadius: DK.wellRadius + 2, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: DK.wellRadius + 2, style: .continuous)
             .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
