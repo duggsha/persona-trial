@@ -54,6 +54,14 @@ final class DeckItem: Identifiable {
     let steps: [DeckRunStep]
     let receiptLine: String
     var ranUnderRule: String?
+    /// What the other side actually said. A card that asks you to reply should
+    /// show you the sentence you are replying to.
+    let incoming: String?
+    /// The window this card is about, drawn as a ruler rather than described.
+    let window: DeckWindow?
+    /// How this got here: the signals that produced the card, in order.
+    /// Rendered as one dense mono line, not prose.
+    let trail: [String]
     let createdAgo: String
     var code: String?
     var codeDeadline: Date?
@@ -62,9 +70,11 @@ final class DeckItem: Identifiable {
 
     init(kind: String, source: String, logo: IrisLogo, avatarAsset: String? = nil,
          ask: String, context: String, facts: String? = nil,
+         incoming: String? = nil, window: DeckWindow? = nil,
          draft: String? = nil, primaryLabel: String = "", declineLabel: String = "Not this",
          alwaysSentence: String? = nil, steps: [DeckRunStep] = [], receiptLine: String = "",
-         ranUnderRule: String? = nil, createdAgo: String, code: String? = nil,
+         ranUnderRule: String? = nil,
+         trail: [String] = [], createdAgo: String, code: String? = nil,
          codeDeadline: Date? = nil, phase: Phase = .asking) {
         self.kind = kind; self.source = source; self.logo = logo
         self.avatarAsset = avatarAsset; self.ask = ask; self.context = context
@@ -72,9 +82,19 @@ final class DeckItem: Identifiable {
         self.primaryLabel = primaryLabel; self.declineLabel = declineLabel
         self.alwaysSentence = alwaysSentence; self.steps = steps
         self.receiptLine = receiptLine; self.ranUnderRule = ranUnderRule
-        self.createdAgo = createdAgo; self.code = code; self.codeDeadline = codeDeadline
+        self.incoming = incoming; self.window = window
+        self.trail = trail; self.createdAgo = createdAgo; self.code = code; self.codeDeadline = codeDeadline
         self.phase = phase
     }
+}
+
+/// A block of time, for drawing. Hours are 24h decimals: 15.5 is 3:30 PM.
+struct DeckWindow: Equatable {
+    let day: String
+    let start: Double
+    let end: Double
+    let openFrom: Double
+    let openTo: Double
 }
 
 struct DeckRule: Identifiable, Equatable {
@@ -83,6 +103,9 @@ struct DeckRule: Identifiable, Equatable {
     let scope: String
     let logo: IrisLogo
     var uses: Int
+    /// The approvals this rule was learned from — shown when the row is opened,
+    /// so a standing permission can always be traced back to what you allowed.
+    var trail: [String] = []
 }
 
 // MARK: Engine
@@ -93,9 +116,16 @@ final class DecisionEngine {
 
     var items: [DeckItem] = []
     var rules: [DeckRule] = [
-        DeckRule(sentence: "Keep travel plans current", scope: "Calendar", logo: .calendar, uses: 7),
-        DeckRule(sentence: "Move gym bookings when classes clash", scope: "Calendar", logo: .calendar, uses: 4),
-        DeckRule(sentence: "File receipts into Notion", scope: "Mail", logo: .mail, uses: 12),
+        DeckRule(sentence: "Keep travel plans current", scope: "Calendar", logo: .calendar, uses: 7,
+                 trail: ["JUN 3 · you moved a Delta alarm yourself",
+                         "JUN 19 · you approved a gate change",
+                         "AUG 2 · you approved 3 in a row, so Iris asked to stop asking"]),
+        DeckRule(sentence: "Move gym bookings when classes clash", scope: "Calendar", logo: .calendar, uses: 4,
+                 trail: ["JUL 8 · you rebooked Tuesday spin",
+                         "JUL 22 · you approved the same move twice in a week"]),
+        DeckRule(sentence: "File receipts into Notion", scope: "Mail", logo: .mail, uses: 12,
+                 trail: ["MAY 14 · you filed 6 receipts by hand",
+                         "MAY 30 · you approved filing without opening the mail"]),
     ]
     var judgmentShown = false
     private var graduated = false
@@ -118,6 +148,7 @@ final class DecisionEngine {
             DeckItem(
                 kind: "code", source: "GITHUB", logo: .github,
                 ask: "", context: "Tap to copy",
+                trail: ["GITHUB SIGN-IN 1m", "SAME DEVICE AS ALWAYS"],
                 createdAgo: "1m", code: "481 902",
                 codeDeadline: Date().addingTimeInterval(9 * 60)
             ),
@@ -126,7 +157,8 @@ final class DecisionEngine {
                 avatarAsset: "AvatarSarah",
                 ask: "Confirm Thursday with Sarah?",
                 context: "She needs an answer before she books the room.",
-                draft: "Thursday still works — 2pm at your office? I'll bring the printed boards.",
+                incoming: "Does Thursday still work for the walkthrough? I have to book the room today.",
+                draft: "Thursday still works. 2pm at your office? I'll bring the printed boards.",
                 primaryLabel: "Send reply",
                 alwaysSentence: "Always send routine replies as you",
                 steps: [
@@ -134,7 +166,8 @@ final class DecisionEngine {
                     DeckRunStep(logo: .mail, text: "Sending as you", detail: "to sarah@northwind.example"),
                     DeckRunStep(logo: .check, text: "Sent", detail: "delivered 2:41 PM"),
                 ],
-                receiptLine: "Replied to Sarah — Thursday 2 PM confirmed.",
+                receiptLine: "Replied to Sarah. Thursday 2 PM confirmed.",
+                trail: ["HER MAIL 1h", "YOUR LAST 40 REPLIES", "THU 2PM OPEN"],
                 createdAgo: "1h"
             ),
             DeckItem(
@@ -143,6 +176,7 @@ final class DecisionEngine {
                 ask: "Give Jason 30 minutes Wednesday?",
                 context: "",
                 facts: "WED · 3:30 – 4:00 PM · INVITE TO JASON",
+                window: DeckWindow(day: "WEDNESDAY", start: 15.5, end: 16, openFrom: 9, openTo: 18),
                 primaryLabel: "Book 3:30",
                 alwaysSentence: "Always schedule when my calendar is open",
                 steps: [
@@ -150,7 +184,8 @@ final class DecisionEngine {
                     DeckRunStep(logo: .mail, text: "Inviting Jason", detail: "jason@northwind.example"),
                     DeckRunStep(logo: .check, text: "On the calendar", detail: "invite accepted pending"),
                 ],
-                receiptLine: "Jason — Wednesday 3:30, invite sent.",
+                receiptLine: "Jason booked Wednesday 3:30, invite sent.",
+                trail: ["HIS MAIL 3h", "3 MESSAGES READ", "ONLY SLOT YOU BOTH HAVE"],
                 createdAgo: "3h"
             ),
             DeckItem(
@@ -158,13 +193,15 @@ final class DecisionEngine {
                 ask: "Take the 7:45 at Marufuku?",
                 context: "",
                 facts: "TONIGHT · 7:45 · 2 SEATS · FREE CANCEL TO 6",
+                window: DeckWindow(day: "TONIGHT", start: 19.75, end: 21.25, openFrom: 17, openTo: 23),
                 primaryLabel: "Book it",
                 alwaysSentence: "Always grab tables at places I've saved",
                 steps: [
                     DeckRunStep(logo: .resy, text: "Taking the 7:45", detail: "Marufuku · 2 seats · counter"),
                     DeckRunStep(logo: .check, text: "Booked", detail: "conf #R-2847 · in Mail"),
                 ],
-                receiptLine: "Marufuku tonight — 7:45, two seats.",
+                receiptLine: "Marufuku tonight, 7:45, two seats.",
+                trail: ["SAVED BY YOU MAR 2", "YOU ASKED IN CHAT 4h", "LAST TABLE UNDER 8PM"],
                 createdAgo: "4h"
             ),
             DeckItem(
@@ -174,8 +211,9 @@ final class DecisionEngine {
                 facts: "SFO → AUS · 9:05 AM · MOVED UP 40 MIN",
                 primaryLabel: "Update calendar",
                 steps: [DeckRunStep(logo: .calendar, text: "Calendar moved to 9:05", detail: "DL 1187 · gate C11")],
-                receiptLine: "Austin flight — calendar moved to 9:05 AM.",
+                receiptLine: "Austin flight moved to 9:05 AM.",
                 ranUnderRule: "Keep travel plans current",
+                trail: ["DELTA PUSH 6h", "MATCHED YOUR CALENDAR", "RAN UNDER A RULE"],
                 createdAgo: "6h", phase: .done
             ),
         ]
@@ -184,7 +222,8 @@ final class DecisionEngine {
     func approve(_ item: DeckItem, always: Bool) {
         if always, let sentence = item.alwaysSentence,
            !rules.contains(where: { $0.sentence == sentence }) {
-            rules.insert(DeckRule(sentence: sentence, scope: scope(for: item.kind), logo: item.logo, uses: 1), at: 0)
+            rules.insert(DeckRule(sentence: sentence, scope: scope(for: item.kind), logo: item.logo, uses: 1,
+                                  trail: ["JUST NOW · you approved \"\(item.ask)\" and chose always"]), at: 0)
         }
         run(item)
         if always, item.kind == "send_draft" { graduate() }
@@ -274,16 +313,38 @@ struct DeckScreen: View {
     @State private var mode: DeckMode = .feed
     @State private var focused: String?
 
+    /// True while the deck is resting on the opening card — the only moment
+    /// the greeting has room to exist.
+    private var atFirstCard: Bool {
+        focused == nil || focused == engine.asks.first?.id.uuidString
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Room for the floating header the host draws over this screen.
-            // The header floats; the page starts a few px under it and the
-            // greeting belongs to the PAGE — it scrolls away with the first
-            // card instead of squatting above the feed forever.
-            Spacer().frame(height: 64)
-
+            // The greeting IS the header clearance now. It used to ride inside
+            // the first card's snap slot, below 64pt of dead space, which left
+            // it stranded in the middle of the screen with nothing above it.
+            // Pinned here it sits directly under the chrome, and card one rises
+            // into the space it vacated — while every later card, whose rest
+            // position is set by the pager's own insets, stays exactly put.
             switch mode {
-            case .feed: pager
+            case .feed:
+                // The greeting OVERLAYS the pager's top inset rather than
+                // sitting above it. That band is empty while card one is
+                // focused — nothing can peek above the first card — so the
+                // greeting can own it, which puts it under the chrome and
+                // card one directly beneath it. From card two on, the band is
+                // the previous card's tail, so the greeting gets out of the
+                // way rather than printing over it.
+                ZStack(alignment: .top) {
+                    pager
+                    greetingRow
+                        .padding(.horizontal, DK.gutter)
+                        .padding(.top, 62)
+                        .opacity(atFirstCard ? 1 : 0)
+                        .animation(.smooth(duration: 0.22), value: atFirstCard)
+                        .allowsHitTesting(atFirstCard)
+                }
             case .brief:
                 BriefView(engine: engine, header: AnyView(greetingRow.padding(.horizontal, DK.gutter)))
             }
@@ -370,22 +431,14 @@ struct DeckScreen: View {
                         // card: one snap unit, so the opening swipe lands on
                         // card two, and only the first card has words instead
                         // of a previous card peeking above it.
-                        VStack(alignment: .leading, spacing: 12) {
-                            if item.id == engine.asks.first?.id {
-                                greetingRow
-                                    .scrollTransition(axis: .vertical) { content, phase in
-                                        content.opacity(phase.isIdentity ? 1 : 0)
-                                    }
-                            }
-                            Group {
-                                if item.kind == "code" {
-                                    CodeCard(item: item)
-                                } else {
-                                    AskCard(item: item, engine: engine)
-                                }
+                        Group {
+                            if item.kind == "code" {
+                                CodeCard(item: item)
+                            } else {
+                                AskCard(item: item, engine: engine)
                             }
                         }
-                        .frame(height: slot)
+                        .frame(height: slot, alignment: .center)
                         .id(item.id.uuidString)
                         .scrollTransition(axis: .vertical) { content, phase in
                             content
@@ -433,20 +486,130 @@ private struct LedgerLine: View {
 
 private struct DeckPlate<Content: View>: View {
     var emphasized = false
+    /// Whether the plate stretches to its whole slot. Ask cards do not: a card
+    /// padded out to a fixed height with nothing in the middle reads as a bug,
+    /// not as breathing room. The code card does, because its one number is
+    /// meant to be found in the centre of the screen.
+    var fills = false
     @ViewBuilder var content: Content
 
     var body: some View {
         content
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity,
+                   maxHeight: fills ? .infinity : nil,
+                   alignment: .topLeading)
             // One surface: frosted dark glass over the canvas. No inner fills
             // anywhere — structure comes from the hairline strata, never from
             // patches of a second grey.
-            .background(DS.Palette.card.opacity(0.42))
+            .background(DS.Palette.card.opacity(0.28))
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
+            // The specular edge: light catches the top lip of real glass and
+            // falls off before the bottom. Without it a frosted panel just
+            // reads as flat grey.
+            .overlay(
+                RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(emphasized ? 0.20 : 0.13),
+                                     Color.white.opacity(0.05),
+                                     Color.white.opacity(0.02)],
+                            startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+            )
             .overlay(RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous)
-                .strokeBorder(emphasized ? DS.Palette.hairline : DS.Palette.hairlineSoft,
-                              lineWidth: 1))
+                .strokeBorder(emphasized ? DS.Palette.hairlineSoft : DS.Palette.hairlineSoft,
+                              lineWidth: 0.5))
+    }
+}
+
+/// The window, drawn. A hairline rule spanning the open hours, the proposed
+/// block struck solid across it, the edges labelled. No sentence needed.
+private struct WindowRuler: View {
+    let window: DeckWindow
+
+    private var span: Double { max(window.openTo - window.openFrom, 0.001) }
+    private var startFraction: Double { (window.start - window.openFrom) / span }
+    private var widthFraction: Double { (window.end - window.start) / span }
+
+    private func label(_ hour: Double) -> String {
+        let h = Int(hour) % 12 == 0 ? 12 : Int(hour) % 12
+        let m = Int((hour - Double(Int(hour))) * 60)
+        return m == 0 ? "\(h)" : String(format: "%d:%02d", h, m)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(window.day)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .kerning(1.1)
+                .foregroundStyle(DS.Palette.placeholder)
+
+            GeometryReader { geo in
+                let w = geo.size.width
+                ZStack(alignment: .leading) {
+                    // The open span, ticked at each hour.
+                    HStack(spacing: 0) {
+                        ForEach(0 ..< Int(span), id: \.self) { _ in
+                            Rectangle()
+                                .fill(DS.Palette.hairline)
+                                .frame(width: 1, height: 6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .frame(height: 6)
+                    .frame(maxHeight: .infinity, alignment: .center)
+
+                    Rectangle()
+                        .fill(DS.Palette.hairlineSoft)
+                        .frame(height: 1)
+
+                    // The block itself.
+                    Rectangle()
+                        .fill(DS.Palette.ink)
+                        .frame(width: max(w * widthFraction, 3), height: 3)
+                        .offset(x: w * startFraction)
+                }
+                .frame(height: 14)
+            }
+            .frame(height: 14)
+
+            HStack {
+                Text(label(window.openFrom))
+                Spacer()
+                Text("\(label(window.start))–\(label(window.end))")
+                    .foregroundStyle(DS.Palette.inkMuted)
+                Spacer()
+                Text(label(window.openTo))
+            }
+            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+            .foregroundStyle(DS.Palette.placeholder)
+        }
+    }
+}
+
+/// The provenance line: what Iris saw, in order, to arrive at this ask.
+/// Mono, tracked, separated by hairline ticks — a readout, not a sentence.
+private struct TrailLine: View {
+    let steps: [String]
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                if index > 0 {
+                    Rectangle()
+                        .fill(DS.Palette.hairline)
+                        .frame(width: 1, height: 8)
+                }
+                Text(step)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .kerning(0.5)
+                    .foregroundStyle(DS.Palette.placeholder)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            Spacer(minLength: 0)
+        }
     }
 }
 
@@ -487,13 +650,12 @@ private struct AskCard: View {
     @Bindable var item: DeckItem
     let engine: DecisionEngine
     @State private var alwaysOpen = false
-    @State private var editingDraft = false
     @FocusState private var draftFocused: Bool
 
     private var running: Bool { if case .running = item.phase { true } else { false } }
 
     var body: some View {
-        DeckPlate(emphasized: true) {
+        DeckPlate(emphasized: true, fills: true) {
             VStack(alignment: .leading, spacing: 0) {
                 SourceRow(item: item)
                     .padding(.horizontal, DK.pad)
@@ -502,6 +664,22 @@ private struct AskCard: View {
                 LedgerLine()
 
                 VStack(alignment: .leading, spacing: 12) {
+                    // Their words first. You cannot judge a reply without the
+                    // sentence it answers.
+                    if let incoming = item.incoming {
+                        HStack(alignment: .top, spacing: 9) {
+                            Rectangle()
+                                .fill(DS.Palette.hairline)
+                                .frame(width: 1)
+                            Text(incoming)
+                                .font(.system(size: 13.5, weight: .light))
+                                .italic()
+                                .foregroundStyle(DS.Palette.placeholder)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     VStack(alignment: .leading, spacing: 6) {
                         Text(item.ask)
                             .font(.system(size: 28, weight: .light))
@@ -521,6 +699,13 @@ private struct AskCard: View {
                             .foregroundStyle(DS.Palette.inkMuted)
                     }
 
+                    // A time you are being asked about is better drawn than
+                    // described — and it is the honest use of the room these
+                    // cards otherwise waste.
+                    if let window = item.window, !running {
+                        WindowRuler(window: window).padding(.top, 2)
+                    }
+
                     if item.draft != nil, !alwaysOpen, !running { draftWell }
                 }
                 .padding(DK.pad)
@@ -533,6 +718,16 @@ private struct AskCard: View {
                         .transition(.asymmetric(
                             insertion: .offset(y: 8).combined(with: .opacity),
                             removal: .opacity))
+                }
+
+                // How this got here. The card has the room, and a machine that
+                // acts on your behalf should always be able to show its work
+                // without being asked — one dense line, no prose.
+                if !item.trail.isEmpty, !running {
+                    LedgerLine()
+                    TrailLine(steps: item.trail)
+                        .padding(.horizontal, DK.pad)
+                        .padding(.vertical, 9)
                 }
 
                 LedgerLine()
@@ -554,42 +749,19 @@ private struct AskCard: View {
         .animation(.snappy(duration: 0.26), value: running)
     }
 
+    /// The draft is not a box inside the card — it IS the card's own words.
+    /// One tap puts the caret in it; there is no edit mode to enter, no second
+    /// surface, no border drawn around your own sentence.
     private var draftWell: some View {
-        Group {
-            if editingDraft {
-                TextEditor(text: Binding(get: { item.draft ?? "" }, set: { item.draft = $0 }))
-                    .focused($draftFocused)
-                    .font(.system(size: 15.5))
-                    .foregroundStyle(DS.Palette.ink)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 70, maxHeight: 130)
-                    .padding(10)
-                    .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                        .strokeBorder(DS.Palette.hairline, lineWidth: 1))
-                    .onAppear { draftFocused = true }
-                    .onChange(of: draftFocused) { _, focus in
-                        if !focus { editingDraft = false }
-                    }
-            } else {
-                Button { editingDraft = true } label: {
-                    HStack(alignment: .top, spacing: 8) {
-                        Rectangle().fill(DS.Palette.hairline).frame(width: 2)
-                        Text(item.draft ?? "")
-                            .font(.system(size: 15.5))
-                            .foregroundStyle(DS.Palette.inkMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Image(systemName: "pencil")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(DS.Palette.placeholder)
-                    }
-                    .padding(10)
-                    .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                        .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
-        }
+        TextField("", text: Binding(get: { item.draft ?? "" }, set: { item.draft = $0 }),
+                  axis: .vertical)
+            .textFieldStyle(.plain)
+            .lineLimit(1 ... 5)
+            .font(.system(size: 16.5, weight: .light))
+            .foregroundStyle(DS.Palette.inkMuted)
+            .tint(DS.Palette.ink)
+            .focused($draftFocused)
+            .submitLabel(.done)
     }
 
     private var actionRow: some View {
@@ -726,7 +898,7 @@ private struct CodeCard: View {
                 Task { try? await Task.sleep(for: .seconds(2))
                        withAnimation(.smooth(duration: 0.3)) { item.copied = false } }
             } label: {
-                DeckPlate {
+                DeckPlate(fills: true) {
                     VStack(alignment: .leading, spacing: 0) {
                         SourceRow(item: item)
                             .padding(.horizontal, DK.pad)
@@ -777,7 +949,7 @@ private struct HandledPage: View {
     let engine: DecisionEngine
 
     var body: some View {
-        DeckPlate {
+        DeckPlate(fills: true) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("HANDLED · \(engine.handled.count)")
@@ -785,17 +957,6 @@ private struct HandledPage: View {
                         .kerning(1.1)
                         .foregroundStyle(DS.Palette.placeholder)
                     Spacer()
-                    Button { engine.judgmentShown = true } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "brain")
-                                .font(.system(size: 9, weight: .semibold))
-                            Text("JUDGMENT")
-                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
-                                .kerning(0.9)
-                        }
-                        .foregroundStyle(DS.Palette.subtle)
-                    }
-                    .buttonStyle(.plain)
                 }
 
                 if engine.handled.isEmpty {
@@ -896,23 +1057,7 @@ private struct BriefView: View {
                     }
                 }
 
-                Button { engine.judgmentShown = true } label: {
-                    HStack {
-                        Image(systemName: "brain")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("\(engine.rules.count) standing rules")
-                            .font(.system(size: 15, weight: .medium))
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(DS.Palette.placeholder)
-                    }
-                    .foregroundStyle(DS.Palette.inkMuted)
-                    .padding(14)
-                    .background(DS.Palette.surfaceMuted,
-                                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-                }
-                .buttonStyle(.plain)
+
 
                 Spacer().frame(height: 120)
             }
@@ -1006,51 +1151,92 @@ private struct BriefAskRow: View {
 
 struct JudgmentSheet: View {
     var engine: DecisionEngine = .shared
+    @State private var opened: UUID?
 
     var body: some View {
         SheetChrome(title: "Judgment") {
-            Text("What Iris may do without asking. Each one learned from an approval you gave.")
-                .font(.system(size: 14.5, weight: .regular))
-                .foregroundStyle(DS.Palette.subtle)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 22)
-
-            SheetSection(title: "Standing rules") {
+            SheetSection(title: "Acts without asking") {
                 ForEach(Array(engine.rules.enumerated()), id: \.element.id) { index, rule in
                     if index > 0 { SheetDivider() }
-                    HStack(spacing: 13) {
-                        IrisLogoTile(logo: rule.logo, size: 22)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(rule.sentence)
-                                .font(.system(size: 15.5, weight: .regular))
-                                .foregroundStyle(DS.Palette.ink)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text("USED \(rule.uses)×")
-                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                                .kerning(0.9)
-                                .foregroundStyle(DS.Palette.placeholder)
-                        }
-                        Spacer(minLength: 8)
-                        Button {
+                    RuleRow(
+                        rule: rule,
+                        open: opened == rule.id,
+                        onToggle: {
+                            withAnimation(.snappy(duration: 0.24)) {
+                                opened = opened == rule.id ? nil : rule.id
+                            }
+                            _ = DSHaptics.tap(.light)
+                        },
+                        onDelete: {
                             withAnimation(.snappy(duration: 0.25)) { engine.deleteRule(rule) }
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(DS.Palette.placeholder)
-                                .frame(width: 30, height: 30)
-                                .contentShape(Circle())
                         }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 56)
+                    )
                 }
             }
+        }
+    }
+}
 
-            Text("Delete a rule and Iris asks again.")
-                .font(.system(size: 12.5, weight: .regular))
-                .foregroundStyle(DS.Palette.placeholder)
-                .frame(maxWidth: .infinity)
+/// One standing permission. Closed it is a sentence and nothing else; opened it
+/// shows the approvals it was learned from, so no rule is ever a black box.
+private struct RuleRow: View {
+    let rule: DeckRule
+    let open: Bool
+    let onToggle: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onToggle) {
+                HStack(spacing: 13) {
+                    IrisLogoTile(logo: rule.logo, size: 22)
+                    Text(rule.sentence)
+                        .font(.system(size: 15.5, weight: .regular))
+                        .foregroundStyle(DS.Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(DS.Palette.placeholder)
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 54)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if open {
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(Array(rule.trail.enumerated()), id: \.offset) { _, line in
+                        HStack(alignment: .top, spacing: 8) {
+                            Circle()
+                                .fill(DS.Palette.hairline)
+                                .frame(width: 3, height: 3)
+                                .padding(.top, 5)
+                            Text(line)
+                                .font(.system(size: 11.5, weight: .regular, design: .monospaced))
+                                .foregroundStyle(DS.Palette.placeholder)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    Button(action: onDelete) {
+                        Text("Ask me again")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(DS.Palette.ink)
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .background(DS.Palette.surfaceMuted,
+                                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 3)
+                }
+                .padding(.horizontal, 49)
+                .padding(.bottom, 14)
+                .transition(.opacity)
+            }
         }
     }
 }

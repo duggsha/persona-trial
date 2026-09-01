@@ -114,8 +114,8 @@ public struct DesignTrialHost: View {
             }
             .sheet(isPresented: Bindable(DecisionEngine.shared).judgmentShown) {
                 JudgmentSheet()
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
             }
             .sheet(isPresented: $settingsShown) {
                 SettingsSheet()
@@ -372,13 +372,15 @@ struct HeaderScrim: View {
         LinearGradient(
             stops: [
                 .init(color: DS.Palette.canvas, location: 0),
-                .init(color: DS.Palette.canvas, location: 0.62),
-                .init(color: DS.Palette.canvas.opacity(0.86), location: 0.78),
+                .init(color: DS.Palette.canvas, location: 0.84),
+                .init(color: DS.Palette.canvas.opacity(0.55), location: 0.93),
                 .init(color: DS.Palette.canvas.opacity(0), location: 1)
             ],
             startPoint: .top, endPoint: .bottom
         )
-        .frame(height: safeTop + 96)
+        // Exactly the chrome's own height: any taller and it starts dimming
+        // the greeting that sits directly beneath it.
+        .frame(height: safeTop + 62)
         .ignoresSafeArea(edges: .top)
     }
 }

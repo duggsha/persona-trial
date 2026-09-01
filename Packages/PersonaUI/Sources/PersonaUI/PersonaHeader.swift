@@ -107,16 +107,14 @@ struct PersonaHeader: View {
                 .padding(.leading, 8)
             }
 
-            // The wordmark's glass is SCROLL-DRIVEN on Home: at the resting
-            // top the logo sits bare (no oval overlapping the page), and the
-            // capsule fades in only once cards scroll under the header and
-            // the logo needs it to read. Chat keeps it always — the
-            // transcript is bottom-anchored, so content sits under the
-            // header from the first message.
+            // The wordmark keeps its glass at all times. It used to appear
+            // only once cards scrolled under it, which left the mark floating
+            // bare and unmatched beside two capsules that were always there.
+            // Now the chrome reads as one row of three glass elements.
             wordmark
                 .padding(.horizontal, 14)
                 .frame(height: 42)
-                .modifier(WordmarkGlass(visible: page == .chat || homeScrolled))
+                .modifier(WordmarkGlass(visible: true))
                 .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, DS.Spacing.gutter)
