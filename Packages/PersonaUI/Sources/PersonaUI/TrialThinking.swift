@@ -373,7 +373,8 @@ struct WorkingFace: View {
                             IrisLogoTile(logo: step.logo, size: 17)
 
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(step.text)
+                                Text(step.text.replacingOccurrences(of: "7:45", with: item.shortTime)
+                                              .replacingOccurrences(of: "Wed 3:30", with: "Wed \(item.shortTime)"))
                                     .font(.system(size: 14.5, weight: state == 1 ? .medium : .regular))
                                     .foregroundStyle(state == 0 ? DS.Palette.placeholder : DS.Palette.ink)
                                 if let detail = index == failedIndex ? item.failureLine : step.detail,
@@ -397,7 +398,7 @@ struct WorkingFace: View {
                                 .fill(DS.Palette.success)
                                 .frame(width: 6, height: 6)
                                 .frame(width: 8, height: 18)
-                            Text(item.receiptLine)
+                            Text(item.liveReceipt)
                                 .font(.system(size: 14.5, weight: .medium))
                                 .foregroundStyle(DS.Palette.ink)
                                 .fixedSize(horizontal: false, vertical: true)

@@ -49,6 +49,35 @@ final class DeckItem: Identifiable {
     let facts: String?
     var draft: String?
     let primaryLabel: String
+    /// The label as it should read RIGHT NOW. A card whose time you just
+    /// changed must not still offer to book the old one.
+    var liveLabel: String {
+        guard ticket != nil, primaryLabel.contains(":") else { return primaryLabel }
+        let verb = primaryLabel.split(separator: " ").first.map(String.init) ?? "Book"
+        return "\(verb) \(shortTime)"
+    }
+    var shortTime: String {
+        ticketTime.formatted(date: .omitted, time: .shortened)
+            .replacingOccurrences(of: " AM", with: "")
+            .replacingOccurrences(of: " PM", with: "")
+    }
+    /// The receipt, with the time actually booked.
+    var liveReceipt: String {
+        guard ticket != nil else { return receiptLine }
+        return receiptLine.replacingOccurrences(
+            of: seededTimeString,
+            with: ticketTime.formatted(date: .omitted, time: .shortened))
+    }
+    private var seededTimeString: String {
+        guard let ticket else { return "" }
+        var parts = DateComponents()
+        parts.hour = Int(ticket.hour)
+        parts.minute = Int((ticket.hour - Double(Int(ticket.hour))) * 60)
+        let seeded = Calendar.current.date(bySettingHour: parts.hour ?? 12,
+                                           minute: parts.minute ?? 0, second: 0,
+                                           of: Date()) ?? Date()
+        return seeded.formatted(date: .omitted, time: .shortened)
+    }
     let declineLabel: String
     let alwaysSentence: String?
     /// The widths this permission could have. Always-for-this-person and
@@ -1636,7 +1665,7 @@ private struct AskCard: View {
                 .buttonStyle(.plain)
 
                 HStack(spacing: 0) {
-                    HoldToApprove(label: item.primaryLabel) {
+                    HoldToApprove(label: item.liveLabel) {
                         alwaysOpen = false
                         engine.approve(item, always: false)
                     }
@@ -1681,7 +1710,7 @@ private struct AskCard: View {
 
             HStack(spacing: 0) {
                 Button { engine.approve(item, always: false) } label: {
-                    Text(item.primaryLabel)
+                    Text(item.liveLabel)
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(DS.Palette.onInk)
                         .frame(maxWidth: .infinity)
@@ -1888,7 +1917,7 @@ private struct ReceiptRow: View {
                         .offset(x: 3, y: 3)
                 }
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.receiptLine)
+                Text(item.liveReceipt)
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(DS.Palette.inkMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2043,7 +2072,7 @@ private struct BriefAskRow: View {
                         .font(.system(size: 13))
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(Color.black, DS.Palette.success)
-                    Text(item.receiptLine)
+                    Text(item.liveReceipt)
                         .font(.system(size: 13))
                         .foregroundStyle(DS.Palette.subtle)
                         .lineLimit(1)
@@ -2076,7 +2105,7 @@ private struct BriefAskRow: View {
                 .buttonStyle(.plain)
 
                 Button { engine.approve(item, always: false) } label: {
-                    Text(item.primaryLabel)
+                    Text(item.liveLabel)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(DS.Palette.onInk)
                         .frame(maxWidth: .infinity)
