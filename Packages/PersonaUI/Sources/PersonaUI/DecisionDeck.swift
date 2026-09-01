@@ -57,6 +57,10 @@ final class DeckItem: Identifiable {
     /// What the other side actually said. A card that asks you to reply should
     /// show you the sentence you are replying to.
     let incoming: String?
+    /// Who caused this, and what Iris made of it. Two words each: the card has
+    /// to be readable as cause then response without being read as a paragraph.
+    let triggerLabel: String
+    let responseLabel: String
     /// The window this card is about, drawn as a ruler rather than described.
     let window: DeckWindow?
     /// How this got here: the signals that produced the card, in order.
@@ -70,7 +74,8 @@ final class DeckItem: Identifiable {
 
     init(kind: String, source: String, logo: IrisLogo, avatarAsset: String? = nil,
          ask: String, context: String, facts: String? = nil,
-         incoming: String? = nil, window: DeckWindow? = nil,
+         incoming: String? = nil, triggerLabel: String = "", responseLabel: String = "",
+         window: DeckWindow? = nil,
          draft: String? = nil, primaryLabel: String = "", declineLabel: String = "Not this",
          alwaysSentence: String? = nil, steps: [DeckRunStep] = [], receiptLine: String = "",
          ranUnderRule: String? = nil,
@@ -82,7 +87,9 @@ final class DeckItem: Identifiable {
         self.primaryLabel = primaryLabel; self.declineLabel = declineLabel
         self.alwaysSentence = alwaysSentence; self.steps = steps
         self.receiptLine = receiptLine; self.ranUnderRule = ranUnderRule
-        self.incoming = incoming; self.window = window
+        self.incoming = incoming
+        self.triggerLabel = triggerLabel; self.responseLabel = responseLabel
+        self.window = window
         self.trail = trail; self.createdAgo = createdAgo; self.code = code; self.codeDeadline = codeDeadline
         self.phase = phase
     }
@@ -158,6 +165,7 @@ final class DecisionEngine {
                 ask: "Confirm Thursday with Sarah?",
                 context: "",
                 incoming: "Does Thursday still work for the walkthrough? I have to book the room today.",
+                triggerLabel: "SARAH ASKED", responseLabel: "IRIS WROTE",
                 draft: "Thursday still works. 2pm at your office? I'll bring the printed boards.",
                 primaryLabel: "Send reply",
                 alwaysSentence: "Always send routine replies as you",
@@ -176,6 +184,8 @@ final class DecisionEngine {
                 ask: "Give Jason 30 minutes Wednesday?",
                 context: "",
                 facts: "WED · 3:30 – 4:00 PM · INVITE TO JASON",
+                incoming: "Can I get 30 minutes this week to go over the firmware timeline?",
+                triggerLabel: "JASON ASKED", responseLabel: "IRIS FOUND",
                 window: DeckWindow(day: "WEDNESDAY", start: 15.5, end: 16, openFrom: 9, openTo: 18),
                 primaryLabel: "Book 3:30",
                 alwaysSentence: "Always schedule when my calendar is open",
@@ -193,6 +203,8 @@ final class DecisionEngine {
                 ask: "Take the 7:45 at Marufuku?",
                 context: "",
                 facts: "TONIGHT · 7:45 · 2 SEATS · FREE CANCEL TO 6",
+                incoming: "book dinner tonight if marufuku has anything",
+                triggerLabel: "YOU ASKED", responseLabel: "IRIS FOUND",
                 window: DeckWindow(day: "TONIGHT", start: 19.75, end: 21.25, openFrom: 17, openTo: 23),
                 primaryLabel: "Book it",
                 alwaysSentence: "Always grab tables at places I've saved",
@@ -209,6 +221,8 @@ final class DecisionEngine {
                 ask: "Move your Austin flight alarm?",
                 context: "",
                 facts: "SFO → AUS · 9:05 AM · MOVED UP 40 MIN",
+                incoming: "Your flight is now departing 40 minutes earlier.",
+                triggerLabel: "DELTA SAID", responseLabel: "IRIS UPDATED",
                 primaryLabel: "Update calendar",
                 steps: [DeckRunStep(logo: .calendar, text: "Calendar moved to 9:05", detail: "DL 1187 · gate C11")],
                 receiptLine: "Austin flight moved to 9:05 AM.",
@@ -523,6 +537,51 @@ private struct DeckPlate<Content: View>: View {
     }
 }
 
+/// A named block of the card: two mono words, then the thing itself.
+private struct Stratum<Content: View>: View {
+    let label: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if !label.isEmpty {
+                Text(label)
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .kerning(1.1)
+                    .foregroundStyle(DS.Palette.placeholder)
+            }
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// What approving will actually do, before you approve it. The same steps the
+/// run rail plays back, shown up front so the button is never a leap.
+private struct StepPreview: View {
+    let steps: [DeckRunStep]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(steps) { step in
+                HStack(spacing: 8) {
+                    IrisLogoTile(logo: step.logo, size: 16)
+                    Text(step.text)
+                        .font(.system(size: 12.5, weight: .regular))
+                        .foregroundStyle(DS.Palette.subtle)
+                    if let detail = step.detail {
+                        Text(detail)
+                            .font(.system(size: 10, weight: .regular, design: .monospaced))
+                            .foregroundStyle(DS.Palette.placeholder)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+}
+
 /// The window, drawn. A hairline rule spanning the open hours, the proposed
 /// block struck solid across it, the edges labelled. No sentence needed.
 private struct WindowRuler: View {
@@ -663,46 +722,61 @@ private struct AskCard: View {
 
                 LedgerLine()
 
-                VStack(alignment: .leading, spacing: 12) {
-                    // Their words first. You cannot judge a reply without the
-                    // sentence it answers.
-                    if let incoming = item.incoming {
-                        Text(incoming)
-                            .font(.system(size: 13.5, weight: .light))
-                            .italic()
-                            .foregroundStyle(DS.Palette.placeholder)
+                // Cause, then response, then how it runs — each named in two
+                // words, each given its own share of the card. The blocks are
+                // separated by Spacers rather than a fixed gap so they use the
+                // whole plate instead of stacking at the top.
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(item.ask)
+                        .font(.system(size: 28, weight: .light))
+                        .tracking(-0.3)
+                        .foregroundStyle(DS.Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !item.context.isEmpty {
+                        Text(item.context)
+                            .font(.system(size: 16.5, weight: .light))
+                            .foregroundStyle(DS.Palette.subtle)
                             .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 6)
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(item.ask)
-                            .font(.system(size: 28, weight: .light))
-                            .tracking(-0.3)
-                            .foregroundStyle(DS.Palette.ink)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if !item.context.isEmpty {
-                            Text(item.context)
-                                .font(.system(size: 16.5, weight: .light))
+                    if let incoming = item.incoming {
+                        Spacer(minLength: 16)
+                        Stratum(label: item.triggerLabel) {
+                            Text(incoming)
+                                .font(.system(size: 14, weight: .light))
+                                .italic()
                                 .foregroundStyle(DS.Palette.subtle)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
 
-                    if let facts = item.facts {
-                        Text(facts)
-                            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                            .kerning(0.6)
-                            .foregroundStyle(DS.Palette.inkMuted)
+                    Spacer(minLength: 16)
+
+                    Stratum(label: item.responseLabel) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if item.draft != nil, !alwaysOpen, !running { draftWell }
+                            if let facts = item.facts {
+                                Text(facts)
+                                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                                    .kerning(0.6)
+                                    .foregroundStyle(DS.Palette.inkMuted)
+                            }
+                            if let window = item.window, !running {
+                                WindowRuler(window: window)
+                            }
+                        }
                     }
 
-                    // A time you are being asked about is better drawn than
-                    // described — and it is the honest use of the room these
-                    // cards otherwise waste.
-                    if let window = item.window, !running {
-                        WindowRuler(window: window).padding(.top, 2)
+                    if !item.steps.isEmpty, !running, item.phase == .asking {
+                        Spacer(minLength: 16)
+                        Stratum(label: "THEN") {
+                            StepPreview(steps: item.steps)
+                        }
                     }
 
-                    if item.draft != nil, !alwaysOpen, !running { draftWell }
+                    Spacer(minLength: 0)
                 }
                 .padding(DK.pad)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

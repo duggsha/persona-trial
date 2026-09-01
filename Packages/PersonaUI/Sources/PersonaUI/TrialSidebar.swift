@@ -117,12 +117,18 @@ struct SheetChevron: View {
 
 // MARK: - Profile (what the menu button opens)
 
+/// One sheet for the person and their settings. They were two, which meant the
+/// profile could only be reached through a row inside itself and the same face
+/// and email were drawn twice in two different sizes.
 struct ProfileSheet: View {
     let onHome: () -> Void
     let onChat: () -> Void
     let onJudgment: () -> Void
-    let onSettings: () -> Void
     @Environment(\.dismiss) private var dismiss
+
+    @State private var notifications = true
+    @State private var voice = "Iris"
+    @State private var speaks = true
 
     var body: some View {
         SheetChrome(title: "Profile") {
@@ -135,7 +141,7 @@ struct ProfileSheet: View {
                 Text("Shaurya Duggal")
                     .font(.system(size: 21, weight: .regular))
                     .foregroundStyle(DS.Palette.ink)
-                Text("duggalshaurya1234@gmail.com")
+                Text(verbatim: "duggalshaurya1234@gmail.com")
                     .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(DS.Palette.subtle)
                 Text("IRIS PRO · JOINED MARCH 2026")
@@ -170,18 +176,44 @@ struct ProfileSheet: View {
                 SheetRow(symbol: "text.bubble", label: "Chat", action: { dismiss(); onChat() }) { SheetChevron() }
                 SheetDivider()
                 SheetRow(symbol: "brain", label: "Judgment", action: { dismiss(); onJudgment() }) { SheetChevron() }
+            }
+
+            SheetSection(title: "Voice") {
+                SheetRow(symbol: "waveform", label: "Voice") {
+                    Menu {
+                        ForEach(["Iris", "Ash", "Cove"], id: \.self) { candidate in
+                            Button(candidate) { voice = candidate }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(voice).font(.system(size: 15, weight: .regular))
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 9, weight: .medium))
+                        }
+                        .foregroundStyle(DS.Palette.subtle)
+                    }
+                }
                 SheetDivider()
-                SheetRow(symbol: "gearshape", label: "Settings", action: { dismiss(); onSettings() }) { SheetChevron() }
+                SheetRow(symbol: "speaker.wave.2", label: "Ask out loud") {
+                    Toggle("", isOn: $speaks).labelsHidden().tint(DS.Palette.ink)
+                }
+                SheetDivider()
+                SheetRow(symbol: "bell", label: "Notifications") {
+                    Toggle("", isOn: $notifications).labelsHidden().tint(DS.Palette.ink)
+                }
             }
 
             SheetSection(title: "More") {
+                SheetRow(symbol: "hand.raised", label: "Privacy", action: {}) { SheetChevron() }
+                SheetDivider()
                 SheetRow(symbol: "questionmark.circle", label: "Help", action: {}) {
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(DS.Palette.placeholder)
                 }
                 SheetDivider()
-                SheetRow(symbol: "rectangle.portrait.and.arrow.right", label: "Sign out", action: {}) { EmptyView() }
+                SheetRow(symbol: "rectangle.portrait.and.arrow.right",
+                         label: "Sign out", tint: DS.Palette.danger, action: {}) { EmptyView() }
             }
 
             Text("IRIS 1.0 (TRIAL)")

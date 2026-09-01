@@ -30,7 +30,6 @@ public struct DesignTrialHost: View {
     @State private var page: PersonaPage = .home
     /// The menu button's slide-over.
     @State private var profileShown = false
-    @State private var settingsShown = false
     /// The transcript, live: voice mode appends to it.
     @State private var chatLog: [ChatMessage] = []
     @State private var chatTrails: [UUID: ChatToolTrail] = [:]
@@ -106,23 +105,17 @@ public struct DesignTrialHost: View {
                 ProfileSheet(
                     onHome: { withAnimation(DS.Motion.page) { page = .home } },
                     onChat: { showChat() },
-                    onJudgment: { DecisionEngine.shared.judgmentShown = true },
-                    onSettings: { settingsShown = true }
+                    onJudgment: { DecisionEngine.shared.judgmentShown = true }
                 )
                 .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.hidden)
             }
             .sheet(isPresented: Bindable(DecisionEngine.shared).judgmentShown) {
                 JudgmentSheet()
                     .presentationDetents([.large])
                     .presentationDragIndicator(.hidden)
             }
-            .sheet(isPresented: $settingsShown) {
-                SettingsSheet()
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
-            }
-        }
+                    }
     }
 
     // MARK: - Pager
