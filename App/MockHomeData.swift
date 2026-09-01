@@ -51,14 +51,14 @@ enum MockHomeData {
         }
 
         turn("get me 30 minutes with jason this week", true, 96)
-        turn("Held Wednesday 3:30. The invite is in your feed — approve it and it sends.", false, 95)
+        turn("Held Wednesday 3:30. The invite is in your feed. Approve it and it sends.", false, 95)
         turn("book dinner tonight if marufuku has anything", true, 93)
-        turn("They have a 7:45 — two counter seats. It's holding in your feed, free cancel until 6.", false, 92)
+        turn("They have a 7:45, two counter seats. It's holding in your feed, free cancel until 6.", false, 92)
         // A gap, so the transcript shows its day/time separator behaviour.
         turn("send sarah the thursday reply", true, 14)
-        turn("Sent as you — Thursday 2 PM confirmed. The receipt is under Handled.", false, 13)
+        turn("Sent as you. Thursday 2 PM confirmed.", false, 13)
         turn("whats left tonight?", true, 4, delivered: true, read: true)
-        turn("Two asks — Jason's slot and the table. Your GitHub code has 9 minutes left.", false, 3)
+        turn("Two asks: Jason's slot and the table. Your GitHub code has 9 minutes left.", false, 3)
         return out
     }()
 

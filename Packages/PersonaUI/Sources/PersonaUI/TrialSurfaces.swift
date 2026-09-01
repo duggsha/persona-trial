@@ -81,9 +81,15 @@ private struct LockScreenMock: View {
                 .foregroundStyle(.white.opacity(0.6))
                 .padding(.bottom, 26)
 
-            notification
-                .padding(.horizontal, 12)
-                .padding(.bottom, 26)
+            // iOS stacks notifications and lets the ones behind peek. Drawing
+            // a single card floating alone is the tell that it is a mockup.
+            ZStack {
+                stackedPeek(inset: 22, opacity: 0.20, drop: 16)
+                stackedPeek(inset: 11, opacity: 0.35, drop: 8)
+                notification
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 26)
         }
         .frame(maxWidth: .infinity)
         .background(
@@ -96,32 +102,59 @@ private struct LockScreenMock: View {
             .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
     }
 
+    /// The edges of the notifications underneath.
+    private func stackedPeek(inset: CGFloat, opacity: Double, drop: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+            .opacity(opacity)
+            .padding(.horizontal, inset)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .offset(y: drop)
+    }
+
     private var notification: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 7) {
-                IrisLogoTile(logo: .iris, size: 17)
-                Text("IRIS")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.72))
-                Spacer(minLength: 0)
-                Text("now")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.5))
+            HStack(alignment: .top, spacing: 10) {
+                IrisLogoTile(logo: .iris, size: 38)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("Maya Chen")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                        IrisLogoTile(logo: .messages, size: 13)
+                        Spacer(minLength: 0)
+                        Text("now")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
+                    Text("we still on for saturday? need to give them a headcount tonight")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // The reply hangs in the same column as the message it
+                    // answers, so the notification reads as one thread.
+                    replyBlock
+                        .padding(.top, 9)
+                }
             }
             .padding(.horizontal, 14)
-            .frame(height: 30)
+            .padding(.top, 13)
+            .padding(.bottom, 13)
 
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 7) {
-                    IrisLogoTile(logo: .messages, size: 15)
-                    Text("Maya Chen")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                Text("we still on for saturday? need to give them a headcount tonight")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
+            Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+
+            actionRow
+        }
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+    }
+
+    private var replyBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
 
                 Text(approved ? "SENT" : "IRIS WROTE")
                     .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
@@ -140,14 +173,12 @@ private struct LockScreenMock: View {
                                        startPoint: .top, endPoint: .bottom),
                         in: RoundedRectangle(cornerRadius: 17, style: .continuous))
                     .opacity(approved ? 0.55 : 1)
-            }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 13)
+        }
+    }
 
-            Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
-
-            // The whole point: the decision ends here, not in another app.
-            HStack(spacing: 0) {
+    /// The whole point: the decision ends here, not in another app.
+    private var actionRow: some View {
+        HStack(spacing: 0) {
                 Button {
                     withAnimation(.snappy(duration: 0.25)) { approved = true }
                     _ = DSHaptics.tap(.rigid)
@@ -176,11 +207,7 @@ private struct LockScreenMock: View {
                     .foregroundStyle(.white.opacity(0.72))
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
-            }
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
     }
 }
 

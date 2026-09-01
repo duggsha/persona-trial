@@ -235,6 +235,28 @@ public struct DesignTrialHost: View {
             }
     }
 
+    /// The composer names the card you are looking at. That is the whole edit
+    /// system: one input that already has the context, instead of a pencil on
+    /// every card and a mode to leave afterwards.
+    private var composerPrompts: [String]? {
+        let engine = DecisionEngine.shared
+        guard page == .home else { return nil }
+        let card = engine.asks.first { $0.id == engine.focusedID }
+            ?? engine.asks.first { $0.phase == .asking }
+        guard let card, card.phase == .asking else { return nil }
+        // First name only: "Tell Iris to change Sarah's reply" is an
+        // instruction; "SARAH WHITFIELD · MAIL" is a database row.
+        let who = card.source
+            .split(separator: "·").first?
+            .trimmingCharacters(in: .whitespaces)
+            .split(separator: " ").first
+            .map { $0.capitalized }
+        if card.draft != nil, let who {
+            return ["Tell Iris to change \(who)'s reply"]
+        }
+        return ["Tell Iris to change this"]
+    }
+
     /// The voice ask, made real: the engine books the table (the feed's
     /// Marufuku card runs and files itself), and the transcript records the
     /// turn, the tool trail, and the reply.
@@ -312,6 +334,7 @@ public struct DesignTrialHost: View {
                     ComposerAttachMenuItem(id: "judgment", icon: "brain",
                                            label: "Judgment") { DecisionEngine.shared.judgmentShown = true }
                 ],
+                placeholderPrompts: composerPrompts,
                 assistantName: profile.assistantName
             )
             .padding(.horizontal, DS.Spacing.gutter)
@@ -349,47 +372,9 @@ private struct PagerHorizontalClip: Shape {
 // MARK: - The work behind the seeded replies
 
 extension DesignTrialHost {
-    /// Every assistant turn in the transcript got there by doing something.
-    /// These are those steps, keyed by the reply they produced and matched on
-    /// text so the App target keeps owning the transcript itself.
-    var seededTrails: [UUID: ChatToolTrail] {
-        var out: [UUID: ChatToolTrail] = [:]
-        for message in messages where !message.isUser {
-            if message.text.hasPrefix("Held Wednesday") {
-                out[message.id] = ChatToolTrail(summary: "Worked 6s · 3 steps", steps: [
-                    .init(logo: .mail, label: "Read Jason's thread",
-                          detail: "3 messages · firmware timeline"),
-                    .init(logo: .calendar, label: "Compared both calendars",
-                          detail: "Wed 15:30–16:00 open for two"),
-                    .init(logo: .calendar, label: "Held the slot",
-                          detail: "invite drafted — not sent")
-                ])
-            } else if message.text.hasPrefix("They have a 7:45") {
-                out[message.id] = ChatToolTrail(summary: "Worked 4s · 2 steps", steps: [
-                    .init(logo: .resy, label: "Checked Marufuku",
-                          detail: "7:45 PM · 2 counter seats"),
-                    .init(logo: .resy, label: "Put a hold on it",
-                          detail: "free cancel until 6:00 PM")
-                ])
-            } else if message.text.hasPrefix("Sent as you") {
-                out[message.id] = ChatToolTrail(summary: "Worked 3s · 2 steps", steps: [
-                    .init(logo: .mail, label: "Wrote the reply as you",
-                          detail: "matched your last 40 sent messages"),
-                    .init(logo: .check, label: "Sent to Sarah Whitfield",
-                          detail: "Thursday 2:00 PM confirmed")
-                ])
-            } else if message.text.hasPrefix("Two asks") {
-                out[message.id] = ChatToolTrail(summary: "Worked 2s · 3 steps", steps: [
-                    .init(logo: .iris, label: "Swept the feed",
-                          detail: "2 asking · 1 expiring"),
-                    .init(logo: .github, label: "Checked the code's clock",
-                          detail: "9m 04s remaining"),
-                    .init(logo: .calendar, label: "Confirmed nothing else lands tonight", detail: nil)
-                ])
-            }
-        }
-        return out
-    }
+    /// No trace boxes in the transcript. Chat is where you talk to Iris; the
+    /// working out belongs on the card that is asking, behind its own control.
+    var seededTrails: [UUID: ChatToolTrail] { [:] }
 }
 
 // MARK: - The fade that keeps content out of the chrome

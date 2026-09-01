@@ -62,6 +62,7 @@ final class DeckItem: Identifiable {
     let triggerLabel: String
     let responseLabel: String
     let replyStyle: ReplyStyle
+    let trace: ThinkingTrace?
     /// Set once the receipt has been read and the card has left the deck.
     var filed = false
     /// The window this card is about, drawn as a ruler rather than described.
@@ -78,7 +79,8 @@ final class DeckItem: Identifiable {
     init(kind: String, source: String, logo: IrisLogo, avatarAsset: String? = nil,
          ask: String, context: String, facts: String? = nil,
          incoming: String? = nil, triggerLabel: String = "", responseLabel: String = "",
-         replyStyle: ReplyStyle = .plain, window: DeckWindow? = nil,
+         replyStyle: ReplyStyle = .plain, trace: ThinkingTrace? = nil,
+         window: DeckWindow? = nil,
          draft: String? = nil, primaryLabel: String = "", declineLabel: String = "Not this",
          alwaysSentence: String? = nil, steps: [DeckRunStep] = [], receiptLine: String = "",
          ranUnderRule: String? = nil,
@@ -92,7 +94,7 @@ final class DeckItem: Identifiable {
         self.receiptLine = receiptLine; self.ranUnderRule = ranUnderRule
         self.incoming = incoming
         self.triggerLabel = triggerLabel; self.responseLabel = responseLabel
-        self.replyStyle = replyStyle
+        self.replyStyle = replyStyle; self.trace = trace
         self.window = window
         self.trail = trail; self.createdAgo = createdAgo; self.code = code; self.codeDeadline = codeDeadline
         self.phase = phase; self.filed = filed
@@ -104,6 +106,22 @@ final class DeckItem: Identifiable {
 /// should look like an iMessage; the point of approving is recognising the
 /// thing you are approving.
 enum ReplyStyle { case plain, mail, imessage }
+
+/// Everything Iris did before it asked. Kept OFF the card and behind one
+/// control: a card is a decision, and the working out belongs where you can go
+/// looking for it rather than in front of the thing you are deciding.
+struct ThinkingTrace: Equatable {
+    struct Source: Equatable, Identifiable {
+        let id = UUID()
+        let logo: IrisLogo
+        let title: String
+        let origin: String
+    }
+    let looked: [String]
+    let sources: [Source]
+    /// Why this is being asked rather than just done.
+    let judgment: String
+}
 
 struct DeckWindow: Equatable {
     let day: String
@@ -144,6 +162,9 @@ final class DecisionEngine {
                          "MAY 30 · you approved filing without opening the mail"]),
     ]
     var judgmentShown = false
+    /// Which card the deck is resting on. The composer reads it so one input
+    /// can edit whatever you are looking at.
+    var focusedID: UUID?
     private var graduated = false
 
     // Haptic pulses. Views subscribe with .sensoryFeedback on these counters;
@@ -179,6 +200,16 @@ final class DecisionEngine {
                 incoming: "Does Thursday still work for the walkthrough? I have to book the room today.",
                 triggerLabel: "SARAH ASKED", responseLabel: "IRIS WROTE",
                 replyStyle: .mail,
+                trace: ThinkingTrace(
+                    looked: ["sarah whitfield · recent thread",
+                             "your calendar · thursday",
+                             "your sent mail · tone match"],
+                    sources: [
+                        .init(logo: .mail, title: "Re: Thursday walkthrough", origin: "3 messages"),
+                        .init(logo: .calendar, title: "Thursday 2:00–3:00 PM", origin: "free"),
+                        .init(logo: .mail, title: "Your last 40 replies to Sarah", origin: "tone"),
+                    ],
+                    judgment: "No standing rule covers replying to Sarah, so this one is yours."),
                 draft: "Thursday still works. 2pm at your office? I'll bring the printed boards.",
                 primaryLabel: "Send reply",
                 alwaysSentence: "Always reply to Sarah about scheduling",
@@ -199,6 +230,16 @@ final class DecisionEngine {
                 facts: "WED · 3:30 – 4:00 PM · INVITE TO JASON",
                 incoming: "Can I get 30 minutes this week to go over the firmware timeline?",
                 triggerLabel: "JASON ASKED", responseLabel: "IRIS FOUND",
+                trace: ThinkingTrace(
+                    looked: ["jason mehta · recent thread",
+                             "both calendars · this week",
+                             "your meeting length habits"],
+                    sources: [
+                        .init(logo: .mail, title: "Firmware timeline", origin: "3 messages"),
+                        .init(logo: .calendar, title: "Wed 3:30–4:00 PM", origin: "only shared slot"),
+                        .init(logo: .calendar, title: "You default to 30 minutes", origin: "42 meetings"),
+                    ],
+                    judgment: "Booking time with someone new is not covered by a rule yet."),
                 window: DeckWindow(day: "WEDNESDAY", start: 15.5, end: 16, openFrom: 9, openTo: 18),
                 primaryLabel: "Book 3:30",
                 alwaysSentence: "Always give Jason time when I'm free",
@@ -218,6 +259,16 @@ final class DecisionEngine {
                 incoming: "we still on for saturday? need to give them a headcount tonight",
                 triggerLabel: "MAYA TEXTED", responseLabel: "IRIS WROTE",
                 replyStyle: .imessage,
+                trace: ThinkingTrace(
+                    looked: ["maya chen · messages",
+                             "your saturday",
+                             "how you answer maya"],
+                    sources: [
+                        .init(logo: .messages, title: "Asked twice in 20 minutes", origin: "urgency"),
+                        .init(logo: .calendar, title: "Saturday is clear", origin: "no conflicts"),
+                        .init(logo: .messages, title: "You reply to Maya in one line", origin: "tone"),
+                    ],
+                    judgment: "Sending as you to a person is always worth one tap."),
                 draft: "Yes, count me in for Saturday.",
                 primaryLabel: "Send it",
                 alwaysSentence: "Always answer Maya about plans",
@@ -236,6 +287,16 @@ final class DecisionEngine {
                 facts: "TONIGHT · 7:45 · 2 SEATS · FREE CANCEL TO 6",
                 incoming: "book dinner tonight if marufuku has anything",
                 triggerLabel: "YOU ASKED", responseLabel: "IRIS FOUND",
+                trace: ThinkingTrace(
+                    looked: ["resy · marufuku tonight",
+                             "your saved places",
+                             "your usual dinner time"],
+                    sources: [
+                        .init(logo: .resy, title: "7:45 PM · 2 counter seats", origin: "last under 8"),
+                        .init(logo: .resy, title: "Saved by you Mar 2", origin: "saved"),
+                        .init(logo: .calendar, title: "Nothing after 6 PM", origin: "free"),
+                    ],
+                    judgment: "You asked for this in chat, so it is a confirmation, not a suggestion."),
                 window: DeckWindow(day: "TONIGHT", start: 19.75, end: 21.25, openFrom: 17, openTo: 23),
                 primaryLabel: "Book it",
                 alwaysSentence: "Always book Marufuku when I ask",
@@ -408,6 +469,9 @@ struct DeckScreen: View {
         .onAppear { engine.seed() }
         // The moments that should be felt, not just seen.
         .sensoryFeedback(.selection, trigger: focused)
+        .onChange(of: focused) { _, id in
+            engine.focusedID = engine.asks.first { $0.id.uuidString == id }?.id
+        }
         .sensoryFeedback(.impact(weight: .light), trigger: engine.stepPulse)
         .sensoryFeedback(.success, trigger: engine.donePulse)
         .sensoryFeedback(.warning, trigger: engine.declinePulse)
@@ -795,6 +859,7 @@ private struct AskCard: View {
     @Bindable var item: DeckItem
     let engine: DecisionEngine
     @State private var alwaysOpen = false
+    @State private var traceShown = false
     @FocusState private var draftFocused: Bool
 
     private var running: Bool { if case .running = item.phase { true } else { false } }
@@ -804,9 +869,7 @@ private struct AskCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 SourceRow(item: item)
                     .padding(.horizontal, DK.pad)
-                    .frame(height: 44)
-
-                LedgerLine()
+                    .frame(height: 48)
 
                 // Cause, then response, then how it runs — each named in two
                 // words, each given its own share of the card. The blocks are
@@ -825,6 +888,26 @@ private struct AskCard: View {
                             .foregroundStyle(DS.Palette.subtle)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.top, 6)
+                    }
+
+                    if item.trace != nil, item.phase == .asking {
+                        Button { traceShown = true } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text("How Iris got here")
+                                    .font(.system(size: 12, weight: .medium))
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 8, weight: .bold))
+                            }
+                            .foregroundStyle(DS.Palette.subtle)
+                            .padding(.horizontal, 11)
+                            .frame(height: 30)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 14)
                     }
 
                     if let incoming = item.incoming {
@@ -870,17 +953,6 @@ private struct AskCard: View {
                             removal: .opacity))
                 }
 
-                // How this got here. The card has the room, and a machine that
-                // acts on your behalf should always be able to show its work
-                // without being asked — one dense line, no prose.
-                if !item.trail.isEmpty, !running {
-                    TrailLine(steps: item.trail)
-                        .padding(.horizontal, DK.pad)
-                        .padding(.bottom, 11)
-                }
-
-                LedgerLine()
-
                 Group {
                     if running { runRail }
                     else if item.phase == .done { doneRow }
@@ -892,6 +964,13 @@ private struct AskCard: View {
         }
         .animation(.snappy(duration: 0.2), value: alwaysOpen)
         .animation(.snappy(duration: 0.26), value: running)
+        .sheet(isPresented: $traceShown) {
+            if let trace = item.trace {
+                ThinkingSheet(item: item, trace: trace)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+            }
+        }
     }
 
     /// The draft is not a box inside the card — it IS the card's own words.
@@ -1381,35 +1460,62 @@ private struct RuleRow: View {
             .buttonStyle(.plain)
 
             if open {
-                VStack(alignment: .leading, spacing: 7) {
-                    ForEach(Array(rule.trail.enumerated()), id: \.offset) { _, line in
-                        HStack(alignment: .top, spacing: 8) {
-                            Circle()
-                                .fill(DS.Palette.hairline)
-                                .frame(width: 3, height: 3)
-                                .padding(.top, 5)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("LEARNED FROM")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .kerning(1)
+                        .foregroundStyle(DS.Palette.placeholder)
+                        .padding(.bottom, 9)
+
+                    ForEach(Array(rule.trail.enumerated()), id: \.offset) { index, line in
+                        HStack(alignment: .top, spacing: 10) {
+                            VStack(spacing: 0) {
+                                Circle()
+                                    .fill(DS.Palette.placeholder.opacity(0.7))
+                                    .frame(width: 4, height: 4)
+                                    .padding(.top, 6)
+                                if index < rule.trail.count - 1 {
+                                    Rectangle()
+                                        .fill(Color.white.opacity(0.09))
+                                        .frame(width: 1)
+                                        .frame(maxHeight: .infinity)
+                                }
+                            }
+                            .frame(width: 4)
                             Text(line)
-                                .font(.system(size: 11.5, weight: .regular, design: .monospaced))
-                                .foregroundStyle(DS.Palette.placeholder)
+                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .foregroundStyle(DS.Palette.subtle)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .padding(.bottom, index < rule.trail.count - 1 ? 10 : 0)
                         }
                     }
 
                     Button(action: onDelete) {
-                        Text("Ask me again")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(DS.Palette.ink)
-                            .padding(.horizontal, 14)
-                            .frame(height: 32)
-                            .background(DS.Palette.surfaceMuted,
-                                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        HStack(spacing: 7) {
+                            Image(systemName: "hand.raised.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Ask me again")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundStyle(DS.Palette.ink)
+                        .padding(.horizontal, 13)
+                        .frame(height: 34)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .padding(.top, 3)
+                    .padding(.top, 14)
                 }
-                .padding(.horizontal, 49)
-                .padding(.bottom, 14)
-                .transition(.opacity)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white.opacity(0.03))
+                // The panel grows out of the row it belongs to rather than
+                // fading in over it.
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .opacity))
+                .clipped()
             }
         }
     }
