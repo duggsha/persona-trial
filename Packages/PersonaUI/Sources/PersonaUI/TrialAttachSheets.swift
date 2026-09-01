@@ -36,14 +36,9 @@ struct ConnectedAppsSheet: View {
                     if index > 0 { SheetDivider() }
                     HStack(spacing: 13) {
                         IrisLogoTile(logo: app.logo, size: 26)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(app.name)
-                                .font(.system(size: 15.5, weight: .regular))
-                                .foregroundStyle(DS.Palette.ink)
-                            Text(app.scope)
-                                .font(.system(size: 10.5, weight: .regular, design: .monospaced))
-                                .foregroundStyle(DS.Palette.placeholder)
-                        }
+                        Text(app.name)
+                            .font(.system(size: 16.5, weight: .regular))
+                            .foregroundStyle(DS.Palette.ink)
                         Spacer(minLength: 8)
                         Toggle("", isOn: Binding(
                             get: { apps[index].on },

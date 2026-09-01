@@ -731,7 +731,7 @@ struct PersonaComposer: View {
 
     private var prompts: [String] {
         if let placeholderPrompts { return placeholderPrompts }
-        var defaults = [String(localized: "Ask \(assistantName) anything")]
+        var defaults = [String(localized: "Ask \(assistantName) to do anything")]
         // Never when voice is off. Held back while FOCUSED even though the
         // hold surface now survives focus: half the line ("Tap to type") is
         // nonsense with the keyboard already up, and a rotating prompt under a

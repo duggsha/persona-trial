@@ -39,6 +39,7 @@ public struct DesignTrialHost: View {
     @State private var photosShown = false
     @State private var filesShown = false
     @State private var cameraShown = false
+    @State private var notificationsShown = false
     /// Live horizontal drag distance while a page swipe is in flight.
     @State private var dragX: CGFloat = 0
     /// Latched once a drag is decisively horizontal: the pages' vertical
@@ -118,6 +119,11 @@ public struct DesignTrialHost: View {
             }
             .sheet(isPresented: $appsShown) {
                 ConnectedAppsSheet()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+            }
+            .sheet(isPresented: $notificationsShown) {
+                NotificationsSheet()
                     .presentationDetents([.large])
                     .presentationDragIndicator(.hidden)
             }
@@ -301,6 +307,8 @@ public struct DesignTrialHost: View {
                 quickActions: [
                     ComposerAttachMenuItem(id: "apps", icon: "square.grid.2x2.fill",
                                            label: "Apps") { appsShown = true },
+                    ComposerAttachMenuItem(id: "notifications", icon: "bell.badge.fill",
+                                           label: "Notifications") { notificationsShown = true },
                     ComposerAttachMenuItem(id: "judgment", icon: "brain",
                                            label: "Judgment") { DecisionEngine.shared.judgmentShown = true }
                 ],

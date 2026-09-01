@@ -61,6 +61,9 @@ final class DeckItem: Identifiable {
     /// to be readable as cause then response without being read as a paragraph.
     let triggerLabel: String
     let responseLabel: String
+    let replyStyle: ReplyStyle
+    /// Set once the receipt has been read and the card has left the deck.
+    var filed = false
     /// The window this card is about, drawn as a ruler rather than described.
     let window: DeckWindow?
     /// How this got here: the signals that produced the card, in order.
@@ -75,12 +78,12 @@ final class DeckItem: Identifiable {
     init(kind: String, source: String, logo: IrisLogo, avatarAsset: String? = nil,
          ask: String, context: String, facts: String? = nil,
          incoming: String? = nil, triggerLabel: String = "", responseLabel: String = "",
-         window: DeckWindow? = nil,
+         replyStyle: ReplyStyle = .plain, window: DeckWindow? = nil,
          draft: String? = nil, primaryLabel: String = "", declineLabel: String = "Not this",
          alwaysSentence: String? = nil, steps: [DeckRunStep] = [], receiptLine: String = "",
          ranUnderRule: String? = nil,
          trail: [String] = [], createdAgo: String, code: String? = nil,
-         codeDeadline: Date? = nil, phase: Phase = .asking) {
+         codeDeadline: Date? = nil, phase: Phase = .asking, filed: Bool = false) {
         self.kind = kind; self.source = source; self.logo = logo
         self.avatarAsset = avatarAsset; self.ask = ask; self.context = context
         self.facts = facts; self.draft = draft
@@ -89,13 +92,19 @@ final class DeckItem: Identifiable {
         self.receiptLine = receiptLine; self.ranUnderRule = ranUnderRule
         self.incoming = incoming
         self.triggerLabel = triggerLabel; self.responseLabel = responseLabel
+        self.replyStyle = replyStyle
         self.window = window
         self.trail = trail; self.createdAgo = createdAgo; self.code = code; self.codeDeadline = codeDeadline
-        self.phase = phase
+        self.phase = phase; self.filed = filed
     }
 }
 
 /// A block of time, for drawing. Hours are 24h decimals: 15.5 is 3:30 PM.
+/// How the reply should be drawn. A message you are about to send in iMessage
+/// should look like an iMessage; the point of approving is recognising the
+/// thing you are approving.
+enum ReplyStyle { case plain, mail, imessage }
+
 struct DeckWindow: Equatable {
     let day: String
     let start: Double
@@ -143,8 +152,11 @@ final class DecisionEngine {
     var donePulse = 0
     var declinePulse = 0
 
-    var asks: [DeckItem] { items.filter { $0.phase == .asking || isRunning($0) } }
-    var handled: [DeckItem] { items.filter { $0.phase == .done } }
+    /// A card that just finished stays in the deck until its receipt has had
+    /// a beat on screen. Filing it instantly meant the result of approving was
+    /// something you only ever saw somewhere else.
+    var asks: [DeckItem] { items.filter { $0.phase == .asking || isRunning($0) || ($0.phase == .done && !$0.filed) } }
+    var handled: [DeckItem] { items.filter { $0.phase == .done && $0.filed } }
     private func isRunning(_ item: DeckItem) -> Bool {
         if case .running = item.phase { true } else { false }
     }
@@ -166,9 +178,10 @@ final class DecisionEngine {
                 context: "",
                 incoming: "Does Thursday still work for the walkthrough? I have to book the room today.",
                 triggerLabel: "SARAH ASKED", responseLabel: "IRIS WROTE",
+                replyStyle: .mail,
                 draft: "Thursday still works. 2pm at your office? I'll bring the printed boards.",
                 primaryLabel: "Send reply",
-                alwaysSentence: "Always send routine replies as you",
+                alwaysSentence: "Always reply to Sarah about scheduling",
                 steps: [
                     DeckRunStep(logo: .mail, text: "Opening the thread", detail: "Re: Thursday walkthrough"),
                     DeckRunStep(logo: .mail, text: "Sending as you", detail: "to sarah@northwind.example"),
@@ -188,7 +201,7 @@ final class DecisionEngine {
                 triggerLabel: "JASON ASKED", responseLabel: "IRIS FOUND",
                 window: DeckWindow(day: "WEDNESDAY", start: 15.5, end: 16, openFrom: 9, openTo: 18),
                 primaryLabel: "Book 3:30",
-                alwaysSentence: "Always schedule when my calendar is open",
+                alwaysSentence: "Always give Jason time when I'm free",
                 steps: [
                     DeckRunStep(logo: .calendar, text: "Holding Wed 3:30", detail: "no conflicts · 30 min"),
                     DeckRunStep(logo: .mail, text: "Inviting Jason", detail: "jason@northwind.example"),
@@ -199,6 +212,24 @@ final class DecisionEngine {
                 createdAgo: "3h"
             ),
             DeckItem(
+                kind: "send_draft", source: "MAYA CHEN · MESSAGES", logo: .messages,
+                ask: "Tell Maya you're in for Saturday?",
+                context: "",
+                incoming: "we still on for saturday? need to give them a headcount tonight",
+                triggerLabel: "MAYA TEXTED", responseLabel: "IRIS WROTE",
+                replyStyle: .imessage,
+                draft: "Yes, count me in for Saturday.",
+                primaryLabel: "Send it",
+                alwaysSentence: "Always answer Maya about plans",
+                steps: [
+                    DeckRunStep(logo: .messages, text: "Sending as you", detail: "to Maya Chen"),
+                    DeckRunStep(logo: .check, text: "Delivered", detail: "read 9:58 PM"),
+                ],
+                receiptLine: "Told Maya you're in for Saturday.",
+                trail: ["HER TEXT 20m", "SHE ASKED TWICE", "YOUR SATURDAY IS OPEN"],
+                createdAgo: "20m"
+            ),
+            DeckItem(
                 kind: "place", source: "RESY", logo: .resy,
                 ask: "Take the 7:45 at Marufuku?",
                 context: "",
@@ -207,7 +238,7 @@ final class DecisionEngine {
                 triggerLabel: "YOU ASKED", responseLabel: "IRIS FOUND",
                 window: DeckWindow(day: "TONIGHT", start: 19.75, end: 21.25, openFrom: 17, openTo: 23),
                 primaryLabel: "Book it",
-                alwaysSentence: "Always grab tables at places I've saved",
+                alwaysSentence: "Always book Marufuku when I ask",
                 steps: [
                     DeckRunStep(logo: .resy, text: "Taking the 7:45", detail: "Marufuku · 2 seats · counter"),
                     DeckRunStep(logo: .check, text: "Booked", detail: "conf #R-2847 · in Mail"),
@@ -224,11 +255,12 @@ final class DecisionEngine {
                 incoming: "Your flight is now departing 40 minutes earlier.",
                 triggerLabel: "DELTA SAID", responseLabel: "IRIS UPDATED",
                 primaryLabel: "Update calendar",
+                alwaysSentence: "Always move my calendar when a flight moves",
                 steps: [DeckRunStep(logo: .calendar, text: "Calendar moved to 9:05", detail: "DL 1187 · gate C11")],
                 receiptLine: "Austin flight moved to 9:05 AM.",
                 ranUnderRule: "Keep travel plans current",
                 trail: ["DELTA PUSH 6h", "MATCHED YOUR CALENDAR", "RAN UNDER A RULE"],
-                createdAgo: "6h", phase: .done
+                createdAgo: "6h", phase: .done, filed: true
             ),
         ]
     }
@@ -271,6 +303,9 @@ final class DecisionEngine {
             }
             donePulse += 1
             withAnimation(.smooth(duration: 0.4)) { item.phase = .done }
+            // The receipt gets its own beat in the card before the card goes.
+            try? await Task.sleep(for: .milliseconds(2400))
+            withAnimation(.smooth(duration: 0.45)) { item.filed = true }
         }
     }
 
@@ -360,7 +395,12 @@ struct DeckScreen: View {
                         .allowsHitTesting(atFirstCard)
                 }
             case .brief:
-                BriefView(engine: engine, header: AnyView(greetingRow.padding(.horizontal, DK.gutter)))
+                // Brief has no pager inset to hide under, so it carries the
+                // header clearance itself.
+                BriefView(engine: engine,
+                          header: AnyView(greetingRow
+                              .padding(.horizontal, DK.gutter)
+                              .padding(.top, 72)))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -464,14 +504,6 @@ struct DeckScreen: View {
                             removal: .offset(x: 140).combined(with: .opacity)))
                     }
 
-                    HandledPage(engine: engine)
-                        .frame(height: slot)
-                        .id("handled")
-                        .scrollTransition(axis: .vertical) { content, phase in
-                            content
-                                .opacity(phase.isIdentity ? 1 : 0.45)
-                                .scaleEffect(phase.isIdentity ? 1 : 0.97)
-                        }
                 }
                 .scrollTargetLayout()
                 .padding(.horizontal, DK.gutter)
@@ -500,8 +532,7 @@ private struct LedgerLine: View {
 
 private struct DeckPlate<Content: View>: View {
     var emphasized = false
-    /// The app this card came from, so the plate can carry its colour.
-    var accent: Color = .white
+
     /// Whether the plate stretches to its whole slot. Ask cards do not: a card
     /// padded out to a fixed height with nothing in the middle reads as a bug,
     /// not as breathing room. The code card does, because its one number is
@@ -521,8 +552,11 @@ private struct DeckPlate<Content: View>: View {
             // frosted plate under it, and the black canvas showing through
             // both. A single flat fill is what made this read as grey card
             // stock instead of glass.
+            // One surface for every card. Tinting each plate by its source app
+            // turned the feed into a colour chart; the logo already says where
+            // a card came from, and it says it more precisely.
             .background(
-                LinearGradient(colors: [accent.opacity(0.13), accent.opacity(0.02), .clear],
+                LinearGradient(colors: [Color.white.opacity(0.055), Color.white.opacity(0.012), .clear],
                                startPoint: .top, endPoint: .bottom)
             )
             .background(DS.Palette.card.opacity(0.16))
@@ -535,7 +569,7 @@ private struct DeckPlate<Content: View>: View {
                 RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous)
                     .strokeBorder(
                         LinearGradient(
-                            colors: [accent.opacity(emphasized ? 0.34 : 0.20),
+                            colors: [Color.white.opacity(emphasized ? 0.26 : 0.16),
                                      Color.white.opacity(0.06),
                                      Color.white.opacity(0.02)],
                             startPoint: .top, endPoint: .bottom),
@@ -544,6 +578,48 @@ private struct DeckPlate<Content: View>: View {
             .overlay(RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous)
                 .strokeBorder(emphasized ? DS.Palette.hairlineSoft : DS.Palette.hairlineSoft,
                               lineWidth: 0.5))
+    }
+}
+
+/// Draws the reply in the shape of the app that will carry it. An iMessage
+/// gets the blue bubble with its tail; mail gets a plain block, because mail
+/// has no shape of its own. Still fully editable inside either.
+private struct ReplyBubble<Content: View>: View {
+    let style: ReplyStyle
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        switch style {
+        case .imessage:
+            content
+                .padding(.horizontal, 15)
+                .padding(.vertical, 11)
+                .background(
+                    LinearGradient(colors: [Color(red: 0.16, green: 0.53, blue: 1),
+                                            Color(red: 0.05, green: 0.40, blue: 0.96)],
+                                   startPoint: .top, endPoint: .bottom),
+                    in: BubbleShape())
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .mail, .plain:
+            content
+        }
+    }
+}
+
+/// A rounded rectangle with the tail iMessage puts on an outgoing bubble.
+private struct BubbleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path(roundedRect: rect, cornerRadius: 19, style: .continuous)
+        let tail = CGRect(x: rect.maxX - 16, y: rect.maxY - 19, width: 16, height: 19)
+        path.move(to: CGPoint(x: tail.minX, y: tail.maxY))
+        path.addCurve(to: CGPoint(x: tail.maxX, y: tail.maxY),
+                      control1: CGPoint(x: tail.minX + 9, y: tail.maxY),
+                      control2: CGPoint(x: tail.maxX - 5, y: tail.maxY - 3))
+        path.addCurve(to: CGPoint(x: tail.minX + 3, y: tail.minY),
+                      control1: CGPoint(x: tail.maxX - 11, y: tail.maxY - 7),
+                      control2: CGPoint(x: tail.minX + 3, y: tail.maxY - 12))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -724,7 +800,7 @@ private struct AskCard: View {
     private var running: Bool { if case .running = item.phase { true } else { false } }
 
     var body: some View {
-        DeckPlate(emphasized: true, accent: item.logo.accent, fills: true) {
+        DeckPlate(emphasized: true, fills: true) {
             VStack(alignment: .leading, spacing: 0) {
                 SourceRow(item: item)
                     .padding(.horizontal, DK.pad)
@@ -738,8 +814,8 @@ private struct AskCard: View {
                 // whole plate instead of stacking at the top.
                 VStack(alignment: .leading, spacing: 0) {
                     Text(item.ask)
-                        .font(.system(size: 28, weight: .light))
-                        .tracking(-0.3)
+                        .font(.system(size: 33, weight: .light))
+                        .tracking(-0.5)
                         .foregroundStyle(DS.Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -755,8 +831,7 @@ private struct AskCard: View {
                         Spacer(minLength: 16)
                         Stratum(label: item.triggerLabel) {
                             Text(incoming)
-                                .font(.system(size: 14, weight: .light))
-                                .italic()
+                                .font(.system(size: 17, weight: .light))
                                 .foregroundStyle(DS.Palette.subtle)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -766,7 +841,9 @@ private struct AskCard: View {
 
                     Stratum(label: item.responseLabel) {
                         VStack(alignment: .leading, spacing: 10) {
-                            if item.draft != nil, !running { draftWell }
+                            if item.draft != nil, !running {
+                                ReplyBubble(style: item.replyStyle) { draftWell }
+                            }
                             if let facts = item.facts {
                                 Text(facts)
                                     .font(.system(size: 11.5, weight: .medium, design: .monospaced))
@@ -805,17 +882,13 @@ private struct AskCard: View {
                 LedgerLine()
 
                 Group {
-                    if running { runRail } else { actionRow }
+                    if running { runRail }
+                    else if item.phase == .done { doneRow }
+                    else { actionRow }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
             }
-        }
-        // The mechanical yes: double-tap anywhere on the focused card.
-        .onTapGesture(count: 2) {
-            guard !running, item.phase == .asking else { return }
-            alwaysOpen = false
-            engine.approve(item, always: false)
         }
         .animation(.snappy(duration: 0.2), value: alwaysOpen)
         .animation(.snappy(duration: 0.26), value: running)
@@ -829,9 +902,9 @@ private struct AskCard: View {
                   axis: .vertical)
             .textFieldStyle(.plain)
             .lineLimit(1 ... 5)
-            .font(.system(size: 16.5, weight: .light))
-            .foregroundStyle(DS.Palette.inkMuted)
-            .tint(DS.Palette.ink)
+            .font(.system(size: 17, weight: .regular))
+            .foregroundStyle(item.replyStyle == .imessage ? Color.white : DS.Palette.ink)
+            .tint(item.replyStyle == .imessage ? Color.white : DS.Palette.ink)
             .focused($draftFocused)
             .submitLabel(.done)
     }
@@ -884,11 +957,6 @@ private struct AskCard: View {
                             in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
             }
 
-            Text("DOUBLE-TAP APPROVES")
-                .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
-                .kerning(1.2)
-                .foregroundStyle(DS.Palette.placeholder.opacity(0.7))
-                .frame(maxWidth: .infinity)
         }
     }
 
@@ -922,6 +990,31 @@ private struct AskCard: View {
                     lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+
+    /// The result, in the card that asked for it.
+    private var doneRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 18))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(Color.black, DS.Palette.success)
+            Text(item.receiptLine)
+                .font(.system(size: 15.5, weight: .medium))
+                .foregroundStyle(DS.Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button { engine.undo(item) } label: {
+                Text("Undo")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(DS.Palette.subtle)
+                    .underline()
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 6)
+        .frame(minHeight: 46)
     }
 
     private var runRail: some View {
@@ -979,7 +1072,7 @@ private struct CodeCard: View {
                 Task { try? await Task.sleep(for: .seconds(2))
                        withAnimation(.smooth(duration: 0.3)) { item.copied = false } }
             } label: {
-                DeckPlate(accent: item.logo.accent, fills: true) {
+                DeckPlate(fills: true) {
                     VStack(alignment: .leading, spacing: 0) {
                         SourceRow(item: item)
                             .padding(.horizontal, DK.pad)
