@@ -85,6 +85,8 @@ final class DeckItem: Identifiable {
     var code: String?
     var codeDeadline: Date?
     var copied = false
+    /// The ticket's time, editable in place.
+    var ticketTime = Date()
     var phase: Phase = .asking
 
     init(kind: String, source: String, logo: IrisLogo, avatarAsset: String? = nil,
@@ -174,6 +176,7 @@ struct DeckTracker: Equatable {
     let progress: Double
     let glyph: String
     let courierAsset: String?
+    let items: [String]
 }
 
 struct DeckWindow: Equatable {
@@ -243,6 +246,40 @@ final class DecisionEngine {
         guard items.isEmpty else { return }
         items = [
             DeckItem(
+                kind: "send_draft", source: "MAYA CHEN · MESSAGES", logo: .messages,
+                avatarAsset: "AvatarSarah",
+                ask: "Tell Maya you're in for Saturday?",
+                context: "",
+                incoming: "we still on for saturday? need to give them a headcount tonight",
+                triggerLabel: "MAYA TEXTED", responseLabel: "IRIS WROTE",
+                replyStyle: .imessage, stakes: .notable,
+                consequence: "Sends from your number, as you.",
+                trace: ThinkingTrace(
+                    looked: ["maya chen · messages",
+                             "your saturday",
+                             "how you answer maya"],
+                    sources: [
+                        .init(logo: .messages, title: "Asked twice in 20 minutes", origin: "urgency"),
+                        .init(logo: .calendar, title: "Saturday is clear", origin: "no conflicts"),
+                        .init(logo: .messages, title: "You reply to Maya in one line", origin: "tone"),
+                    ],
+                    judgment: "Sending as you to a person is always worth one tap.",
+                    ruledOut: ["Waiting until tonight. She needs the headcount by then",
+                               "A longer reply. You answer Maya in one line",
+                               "Declining. Your Saturday is clear"]),
+                draft: "Yes, count me in for Saturday.",
+                primaryLabel: "Send it",
+                declineLabel: "Don't send",
+                alwaysSentence: "Always send plan replies to Maya",
+                steps: [
+                    DeckRunStep(logo: .messages, text: "Sending as you", detail: "to Maya Chen"),
+                    DeckRunStep(logo: .check, text: "Delivered", detail: "read 9:58 PM"),
+                ],
+                receiptLine: "Told Maya you're in for Saturday.",
+                trail: ["HER TEXT 20m", "SHE ASKED TWICE", "YOUR SATURDAY IS OPEN"],
+                createdAgo: "20m"
+            ),
+            DeckItem(
                 kind: "tracker", source: "DOORDASH", logo: .doordash,
                 ask: "Lunch is on the way.",
                 context: "",
@@ -251,7 +288,8 @@ final class DecisionEngine {
                     detail: "Marufuku · 2 items · Dmitri is 4 stops away",
                     progress: 0.68,
                     glyph: "bag.fill",
-                    courierAsset: "AvatarJason"),
+                    courierAsset: "AvatarJason",
+                    items: ["1 × Tonkotsu ramen", "1 × Karaage", "2 × Green tea"]),
                 createdAgo: "6m"
             ),
             DeckItem(
@@ -278,6 +316,7 @@ final class DecisionEngine {
                                "Sending it silently. You have never let Iris write to Sarah"]),
                 draft: "Thursday still works. 2pm at your office? I'll bring the printed boards.",
                 primaryLabel: "Send reply",
+                declineLabel: "Don't send",
                 alwaysSentence: "Always send scheduling replies to Sarah",
                 steps: [
                     DeckRunStep(logo: .mail, text: "Opening the thread", detail: "Re: Thursday walkthrough"),
@@ -312,6 +351,7 @@ final class DecisionEngine {
                                    headline: "3:30 – 4:00 PM",
                                    lines: ["30 min", "invite to Jason", "no conflicts"]),
                 primaryLabel: "Book 3:30",
+                declineLabel: "Don't book",
                 alwaysSentence: "Always book time with anyone when I'm free",
                 steps: [
                     DeckRunStep(logo: .calendar, text: "Holding Wed 3:30", detail: "no conflicts · 30 min"),
@@ -323,41 +363,8 @@ final class DecisionEngine {
                 createdAgo: "3h"
             ),
             DeckItem(
-                kind: "send_draft", source: "MAYA CHEN · MESSAGES", logo: .messages,
-                avatarAsset: "AvatarSarah",
-                ask: "Tell Maya you're in for Saturday?",
-                context: "",
-                incoming: "we still on for saturday? need to give them a headcount tonight",
-                triggerLabel: "MAYA TEXTED", responseLabel: "IRIS WROTE",
-                replyStyle: .imessage, stakes: .notable,
-                consequence: "Sends from your number, as you.",
-                trace: ThinkingTrace(
-                    looked: ["maya chen · messages",
-                             "your saturday",
-                             "how you answer maya"],
-                    sources: [
-                        .init(logo: .messages, title: "Asked twice in 20 minutes", origin: "urgency"),
-                        .init(logo: .calendar, title: "Saturday is clear", origin: "no conflicts"),
-                        .init(logo: .messages, title: "You reply to Maya in one line", origin: "tone"),
-                    ],
-                    judgment: "Sending as you to a person is always worth one tap.",
-                    ruledOut: ["Waiting until tonight. She needs the headcount by then",
-                               "A longer reply. You answer Maya in one line",
-                               "Declining. Your Saturday is clear"]),
-                draft: "Yes, count me in for Saturday.",
-                primaryLabel: "Send it",
-                alwaysSentence: "Always send plan replies to Maya",
-                steps: [
-                    DeckRunStep(logo: .messages, text: "Sending as you", detail: "to Maya Chen"),
-                    DeckRunStep(logo: .check, text: "Delivered", detail: "read 9:58 PM"),
-                ],
-                receiptLine: "Told Maya you're in for Saturday.",
-                trail: ["HER TEXT 20m", "SHE ASKED TWICE", "YOUR SATURDAY IS OPEN"],
-                createdAgo: "20m"
-            ),
-            DeckItem(
                 kind: "place", source: "RESY", logo: .resy,
-                ask: "Hold the 7:45 at Marufuku?",
+                ask: "Book Marufuku tonight?",
                 context: "",
                 incoming: "book dinner tonight if marufuku has anything",
                 triggerLabel: "YOU ASKED", responseLabel: "IRIS FOUND",
@@ -378,10 +385,11 @@ final class DecisionEngine {
                     ruledOut: ["9:15 PM. Later than you have ever booked",
                                "Sushi Kashiba. You have not saved it",
                                "Booking silently. It charges a deposit"]),
-                ticket: DeckTicket(eyebrow: "MARUFUKU · TONIGHT",
+                ticket: DeckTicket(eyebrow: "TONIGHT · MARUFUKU",
                                    headline: "7:45 PM",
                                    lines: ["2 seats", "counter", "$40 hold"]),
                 primaryLabel: "Book it",
+                declineLabel: "Don't book",
                 alwaysSentence: "Always book tables at Marufuku",
                 steps: [
                     DeckRunStep(logo: .resy, text: "Taking the 7:45", detail: "Marufuku · 2 seats · counter"),
@@ -400,6 +408,7 @@ final class DecisionEngine {
                 incoming: "Your flight is now departing 40 minutes earlier.",
                 triggerLabel: "DELTA SAID", responseLabel: "IRIS UPDATED",
                 primaryLabel: "Update calendar",
+                declineLabel: "Leave it",
                 alwaysSentence: "Always move my calendar for any airline",
                 steps: [DeckRunStep(logo: .calendar, text: "Calendar moved to 9:05", detail: "DL 1187 · gate C11")],
                 receiptLine: "Austin flight moved to 9:05 AM.",
@@ -754,34 +763,6 @@ private struct DeckPlate<Content: View>: View {
     }
 }
 
-/// Draws the reply in the shape of the app that will carry it. An iMessage
-/// gets the blue bubble with its tail; mail gets a plain block, because mail
-/// has no shape of its own. Still fully editable inside either.
-private struct ReplyBubble<Content: View>: View {
-    let style: ReplyStyle
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        switch style {
-        case .imessage:
-            content
-                .padding(.horizontal, 15)
-                .padding(.vertical, 11)
-                .background(
-                    LinearGradient(colors: [Color(red: 0.16, green: 0.53, blue: 1),
-                                            Color(red: 0.05, green: 0.40, blue: 0.96)],
-                                   startPoint: .top, endPoint: .bottom),
-                    in: RoundedRectangle(cornerRadius: 21, style: .continuous))
-                .frame(maxWidth: .infinity, alignment: .leading)
-        case .mail, .plain:
-            content
-        }
-    }
-}
-
-/// A card with nothing to decide. It exists because a feed that can only ask
-/// leaves you nowhere to watch the thing you already approved — so the moment
-/// you say yes, it drops out of your life entirely until it succeeds or fails.
 private struct TrackerCard: View {
     let item: DeckItem
 
@@ -792,16 +773,10 @@ private struct TrackerCard: View {
                     .padding(.horizontal, DK.pad)
                     .frame(height: 48)
 
-                // Centred, not bottom-anchored: a live activity is a compact
-                // block and belongs in the middle of the plate it sits on.
-                Spacer(minLength: 0)
-
                 if let tracker = item.tracker {
-                    // The shape Apple already taught everyone to read on a lock
-                    // screen: name, one headline, one line of detail, and a
-                    // track with the thing moving along it. A five-stop rail
-                    // with five labels is a diagram; this is a glance.
                     VStack(alignment: .leading, spacing: 0) {
+                        Spacer(minLength: 0)
+
                         HStack(alignment: .top, spacing: 12) {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(tracker.headline)
@@ -809,7 +784,7 @@ private struct TrackerCard: View {
                                     .tracking(-0.6)
                                     .foregroundStyle(DS.Palette.ink)
                                 Text(tracker.detail)
-                                    .font(.system(size: 14, weight: .regular))
+                                    .font(.system(size: 14))
                                     .foregroundStyle(DS.Palette.subtle)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -824,12 +799,41 @@ private struct TrackerCard: View {
                         }
 
                         RunTrack(progress: tracker.progress, glyph: tracker.glyph)
-                            .padding(.top, 24)
+                            .padding(.top, 22)
+
+                        Spacer(minLength: 20)
+
+                        // The contents sit at the FOOT of the card on purpose:
+                        // that band is what the next card sees of this one, and
+                        // a peek of empty plate says nothing about what is in
+                        // the bag.
+                        if !tracker.items.isEmpty {
+                            VStack(spacing: 0) {
+                                ForEach(Array(tracker.items.enumerated()), id: \.offset) { index, line in
+                                    if index > 0 {
+                                        Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                                    }
+                                    HStack {
+                                        Text(line)
+                                            .font(.system(size: 13.5))
+                                            .foregroundStyle(DS.Palette.subtle)
+                                        Spacer(minLength: 0)
+                                    }
+                                    .frame(height: 38)
+                                    .padding(.horizontal, 14)
+                                }
+                            }
+                            .background(.ultraThinMaterial,
+                                        in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+                        }
                     }
                     .padding(.horizontal, DK.pad)
+                    .padding(.bottom, DK.pad)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 }
 
-                Spacer(minLength: 0)
             }
         }
     }
@@ -846,20 +850,15 @@ private struct RunTrack: View {
             let w = geo.size.width
             let head = max(min(progress, 1), 0) * (w - 34)
             ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.white.opacity(0.10))
-                    .frame(height: 4)
-                Capsule()
-                    .fill(DS.Palette.ink)
-                    .frame(width: head + 17, height: 4)
+                Capsule().fill(Color.white.opacity(0.10)).frame(height: 4)
+                Capsule().fill(DS.Palette.ink).frame(width: head + 17, height: 4)
                 Circle()
                     .fill(DS.Palette.ink)
                     .frame(width: 34, height: 34)
                     .overlay(
                         Image(systemName: glyph)
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(DS.Palette.onInk)
-                    )
+                            .foregroundStyle(DS.Palette.onInk))
                     .offset(x: head)
                 Circle()
                     .fill(Color.white.opacity(0.22))
@@ -872,41 +871,65 @@ private struct RunTrack: View {
     }
 }
 
-/// A detail ticket: the actual thing being proposed, boxed off from the
-/// sentence proposing it. A time and a table are objects, not prose, and an
-/// hour ruler with tick marks was a diagram nobody asked for.
+/// The thing being proposed, and — the part that was missing — a thing you can
+/// change. Tapping the time opens a wheel, the way tapping a time in Clock
+/// does. Edit before approving cannot only mean editing a sentence.
 private struct DetailTicket: View {
-    let eyebrow: String
-    let headline: String
-    let lines: [String]
+    let ticket: DeckTicket
+    let item: DeckItem
+    @State private var editing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(eyebrow)
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .kerning(1.1)
-                    .foregroundStyle(DS.Palette.placeholder)
-                Spacer(minLength: 0)
+            Text(ticket.eyebrow)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .kerning(1.1)
+                .foregroundStyle(DS.Palette.placeholder)
+
+            Button {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.78)) { editing.toggle() }
+                _ = DSHaptics.tap(.light)
+            } label: {
+                HStack(spacing: 8) {
+                    Text(item.ticketTime.formatted(date: .omitted, time: .shortened))
+                        .font(.system(size: 30, weight: .light))
+                        .tracking(-0.4)
+                        .foregroundStyle(DS.Palette.ink)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(DS.Palette.placeholder)
+                        .rotationEffect(.degrees(editing ? 180 : 0))
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, 4)
+                .contentShape(Rectangle())
             }
-            Text(headline)
-                .font(.system(size: 26, weight: .light))
-                .tracking(-0.3)
-                .foregroundStyle(DS.Palette.ink)
-                .padding(.top, 5)
+            .buttonStyle(.plain)
+
+            if editing {
+                DatePicker("", selection: Binding(get: { item.ticketTime },
+                                                  set: { item.ticketTime = $0 }),
+                           displayedComponents: .hourAndMinute)
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 128)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+            }
+
             HStack(spacing: 7) {
-                ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                ForEach(Array(ticket.lines.enumerated()), id: \.offset) { index, line in
                     if index > 0 {
                         Circle().fill(DS.Palette.placeholder.opacity(0.5))
                             .frame(width: 2.5, height: 2.5)
                     }
                     Text(line)
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(DS.Palette.subtle)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.top, 7)
+            .padding(.top, 8)
         }
         .padding(.horizontal, 15)
         .padding(.vertical, 14)
@@ -923,7 +946,120 @@ private struct DetailTicket: View {
     }
 }
 
-/// A named block of the card:/// A named block of the card: two mono words, then the thing itself.
+/// A thread, drawn the way Messages draws one: theirs grey on the left, yours
+/// blue on the right, both hugging their own text. Yours is the live field —
+/// tap anywhere in the blue and the caret is there.
+private struct MessageThread: View {
+    let incoming: String
+    @Binding var draft: String
+    var focused: FocusState<Bool>.Binding
+    let editable: Bool
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text(incoming)
+                    .font(.system(size: 16.5))
+                    .foregroundStyle(DS.Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color(white: 0.24),
+                                in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                // A bubble that stretches the full width is not a bubble.
+                Spacer(minLength: 44)
+            }
+
+            HStack {
+                Spacer(minLength: 44)
+                Group {
+                    if editable {
+                        TextField("", text: $draft, axis: .vertical)
+                            .textFieldStyle(.plain)
+                            .lineLimit(1 ... 5)
+                            .multilineTextAlignment(.trailing)
+                            .focused(focused)
+                            .tint(.white)
+                    } else {
+                        Text(draft)
+                    }
+                }
+                .font(.system(size: 16.5))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    LinearGradient(colors: [Color(red: 0.16, green: 0.53, blue: 1),
+                                            Color(red: 0.05, green: 0.40, blue: 0.96)],
+                                   startPoint: .top, endPoint: .bottom),
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+        }
+    }
+}
+
+/// Mail has no bubble geometry, so it gets Mail's: a header that says who it
+/// is going to and what it is answering, a rule, then the body you can type in.
+private struct MailReply: View {
+    let to: String
+    let incoming: String
+    @Binding var draft: String
+    var focused: FocusState<Bool>.Binding
+    let editable: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("TO")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .kerning(1)
+                    .foregroundStyle(DS.Palette.placeholder)
+                    .frame(width: 26, alignment: .leading)
+                Text(to)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(DS.Palette.inkMuted)
+                Spacer(minLength: 0)
+            }
+            .frame(height: 26)
+
+            HStack(alignment: .top, spacing: 8) {
+                Text("RE")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .kerning(1)
+                    .foregroundStyle(DS.Palette.placeholder)
+                    .frame(width: 26, alignment: .leading)
+                    .padding(.top, 3)
+                Text(incoming)
+                    .font(.system(size: 14, weight: .light))
+                    .foregroundStyle(DS.Palette.subtle)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(.bottom, 12)
+
+            Rectangle().fill(Color.white.opacity(0.09)).frame(height: 1)
+
+            Group {
+                if editable {
+                    TextField("", text: $draft, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1 ... 6)
+                        .focused(focused)
+                        .tint(DS.Palette.ink)
+                } else {
+                    Text(draft)
+                }
+            }
+            .font(.system(size: 17))
+            .foregroundStyle(DS.Palette.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 12)
+        }
+    }
+}
+
+/// A named block of the card:/// A named block of the card:/// A named block of the card: two mono words, then the thing itself.
 private struct Stratum<Content: View>: View {
     let label: String
     @ViewBuilder var content: Content
@@ -1096,6 +1232,15 @@ private struct AskCard: View {
     let engine: DecisionEngine
     @State private var alwaysOpen = false
     @State private var traceShown = false
+    /// "Sarah Whitfield · Mail" is a database row; "Sarah" is who you are
+    /// writing to.
+    private var firstName: String {
+        item.source.split(separator: "·").first?
+            .trimmingCharacters(in: .whitespaces)
+            .split(separator: " ").first
+            .map { $0.capitalized } ?? ""
+    }
+
     @FocusState private var draftFocused: Bool
 
     private var running: Bool { if case .running = item.phase { true } else { false } }
@@ -1146,49 +1291,46 @@ private struct AskCard: View {
                         .padding(.top, 14)
                     }
 
-                    if let incoming = item.incoming {
-                        Spacer(minLength: 16)
-                        Stratum(label: item.triggerLabel) {
-                            if item.replyStyle == .imessage {
-                                // Incoming is grey and sits left; outgoing is blue.
-                                // That contrast IS how you read a thread, so the
-                                // card borrows it rather than inventing one.
-                                Text(incoming)
-                                    .font(.system(size: 17))
-                                    .foregroundStyle(DS.Palette.ink)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .padding(.horizontal, 15)
-                                    .padding(.vertical, 11)
-                                    .background(Color(white: 0.23),
-                                                in: RoundedRectangle(cornerRadius: 21, style: .continuous))
-                            } else {
+                    // Each app's reply is drawn the way that app draws it.
+                    // A thread is grey-left / blue-right with bubbles that hug
+                    // their text — that geometry IS how you read who said what,
+                    // so the SARAH ASKED / IRIS WROTE labels are redundant there.
+                    // Mail has no shape of its own, so it keeps a header.
+                    if let incoming = item.incoming, item.replyStyle == .imessage {
+                        Spacer(minLength: 14)
+                        MessageThread(incoming: incoming,
+                                      draft: Binding(get: { item.draft ?? "" },
+                                                     set: { item.draft = $0 }),
+                                      focused: $draftFocused,
+                                      editable: !running)
+                    } else if let incoming = item.incoming, item.replyStyle == .mail {
+                        Spacer(minLength: 14)
+                        MailReply(to: firstName,
+                                  incoming: incoming,
+                                  draft: Binding(get: { item.draft ?? "" },
+                                                 set: { item.draft = $0 }),
+                                  focused: $draftFocused,
+                                  editable: !running)
+                    } else {
+                        if let incoming = item.incoming {
+                            Spacer(minLength: 16)
+                            Stratum(label: item.triggerLabel) {
                                 Text(incoming)
                                     .font(.system(size: 17, weight: .light))
                                     .foregroundStyle(DS.Palette.subtle)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                    }
-
-                    Spacer(minLength: 16)
-
-                    // A reply gets a label, because it is Iris speaking for you
-                    // and you should know that. A ticket does not: it is the
-                    // thing itself, and IRIS FOUND above it was narration.
-                    if item.draft != nil, !running {
-                        Stratum(label: item.responseLabel) {
-                            ReplyBubble(style: item.replyStyle) { draftWell }
-                        }
-                    } else if let ticket = item.ticket {
-                        DetailTicket(eyebrow: ticket.eyebrow,
-                                     headline: ticket.headline,
-                                     lines: ticket.lines)
-                    } else if let facts = item.facts {
-                        Stratum(label: item.responseLabel) {
-                            Text(facts)
-                                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                                .kerning(0.6)
-                                .foregroundStyle(DS.Palette.inkMuted)
+                        Spacer(minLength: 16)
+                        if let ticket = item.ticket {
+                            DetailTicket(ticket: ticket, item: item)
+                        } else if let facts = item.facts {
+                            Stratum(label: item.responseLabel) {
+                                Text(facts)
+                                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                                    .kerning(0.6)
+                                    .foregroundStyle(DS.Palette.inkMuted)
+                            }
                         }
                     }
 
@@ -1197,10 +1339,10 @@ private struct AskCard: View {
                 .padding(DK.pad)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-                if alwaysOpen, let sentence = item.alwaysSentence, !running {
+                if let sentence = item.alwaysSentence, item.phase == .asking {
                     alwaysMenu(sentence)
                         .padding(.horizontal, DK.pad)
-                        .padding(.bottom, 10)
+                        .padding(.bottom, 12)
                         .transition(.asymmetric(
                             insertion: .scale(scale: 0.86, anchor: .bottomTrailing)
                                 .combined(with: .opacity)
@@ -1293,82 +1435,64 @@ private struct AskCard: View {
     }
 
     private var lowStakesRow: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 8) {
-                Button { engine.decline(item) } label: {
-                    Text(item.declineLabel)
-                        .font(.system(size: 15.5, weight: .regular))
-                        .foregroundStyle(DS.Palette.inkMuted)
-                        .frame(height: 54)
-                        .padding(.horizontal, 18)
-                        .background(.ultraThinMaterial,
-                                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    alwaysOpen = false
-                    engine.approve(item, always: false)
-                } label: {
-                    Text(item.primaryLabel)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(DS.Palette.onInk)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background(DS.Palette.ink,
-                                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-                }
-                .buttonStyle(.plain)
-
-                if item.alwaysSentence != nil {
-                    Button { alwaysOpen.toggle() } label: {
-                        Image(systemName: "infinity")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(alwaysOpen ? DS.Palette.onInk : DS.Palette.inkMuted)
-                            .frame(width: 54, height: 54)
-                            .background(alwaysOpen ? AnyShapeStyle(DS.Palette.ink)
-                                                   : AnyShapeStyle(Material.ultraThin),
-                                        in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                }
+        HStack(spacing: 8) {
+            Button { engine.decline(item) } label: {
+                Text(item.declineLabel)
+                    .font(.system(size: 15.5))
+                    .foregroundStyle(DS.Palette.inkMuted)
+                    .frame(height: 54)
+                    .padding(.horizontal, 18)
+                    .background(.ultraThinMaterial,
+                                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
             }
+            .buttonStyle(.plain)
 
+            Button {
+                engine.approve(item, always: alwaysOpen)
+            } label: {
+                Text(alwaysOpen ? "\(item.primaryLabel), always" : item.primaryLabel)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(DS.Palette.onInk)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(
+                        LinearGradient(colors: [Color.white, Color(white: 0.88)],
+                                       startPoint: .top, endPoint: .bottom),
+                        in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+                    .contentTransition(.opacity)
+            }
+            .buttonStyle(.plain)
         }
     }
 
+    /// The standing rule is a decision you make BEFORE approving, so it is a
+    /// switch above the button rather than a second button beside it — and the
+    /// button then says what it is about to do: "Send it, always".
     private func alwaysMenu(_ sentence: String) -> some View {
         Button {
-            alwaysOpen = false
-            engine.approve(item, always: true)
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.76)) { alwaysOpen.toggle() }
+            _ = DSHaptics.tap(.light)
         } label: {
-            HStack(spacing: 9) {
-                Image(systemName: "infinity")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(item.logo.accent)
+            HStack(spacing: 10) {
+                Image(systemName: alwaysOpen ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15))
+                    .foregroundStyle(alwaysOpen ? DS.Palette.ink : DS.Palette.placeholder)
                 Text(sentence)
-                    .font(.system(size: 14.5, weight: .medium))
-                    .foregroundStyle(DS.Palette.ink)
+                    .font(.system(size: 13.5, weight: alwaysOpen ? .medium : .regular))
+                    .foregroundStyle(alwaysOpen ? DS.Palette.ink : DS.Palette.subtle)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 13)
-            .frame(height: 46)
-            .background(
-                LinearGradient(colors: [item.logo.accent.opacity(0.16), .clear],
-                               startPoint: .top, endPoint: .bottom),
-                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.ultraThinMaterial,
                         in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(colors: [item.logo.accent.opacity(0.4), Color.white.opacity(0.05)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1))
+                .strokeBorder(Color.white.opacity(alwaysOpen ? 0.22 : 0.08), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
