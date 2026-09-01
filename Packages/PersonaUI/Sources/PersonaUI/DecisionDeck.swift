@@ -89,7 +89,8 @@ final class DeckItem: Identifiable {
     var code: String?
     var codeDeadline: Date?
     var copied = false
-    /// The ticket's time, editable in place.
+    /// The ticket's time, editable in place. Seeded from the ticket rather
+    /// than from the clock.
     var ticketTime = Date()
     var phase: Phase = .asking
 
@@ -119,6 +120,14 @@ final class DeckItem: Identifiable {
         self.consequence = consequence
         self.failsOnce = failsOnce; self.failureLine = failureLine
         self.trace = trace; self.tracker = tracker; self.ticket = ticket
+        if let ticket {
+            var parts = DateComponents()
+            parts.hour = Int(ticket.hour)
+            parts.minute = Int((ticket.hour - Double(Int(ticket.hour))) * 60)
+            self.ticketTime = Calendar.current.date(
+                bySettingHour: parts.hour ?? 12, minute: parts.minute ?? 0, second: 0,
+                of: Date()) ?? Date()
+        }
         self.window = window
         self.trail = trail; self.createdAgo = createdAgo; self.code = code; self.codeDeadline = codeDeadline
         self.phase = phase; self.filed = filed
@@ -173,6 +182,8 @@ struct DeckTicket: Equatable {
     let eyebrow: String
     let headline: String
     let lines: [String]
+    /// 24h decimal: 15.5 is 3:30 PM. The card's editable time starts here.
+    let hour: Double
 }
 
 struct DeckTracker: Equatable {
@@ -361,7 +372,8 @@ final class DecisionEngine {
                                "Thursday. Sarah already has that slot pending"]),
                 ticket: DeckTicket(eyebrow: "WEDNESDAY",
                                    headline: "3:30 – 4:00 PM",
-                                   lines: ["30 min", "invite to Jason", "no conflicts"]),
+                                   lines: ["30 min", "invite to Jason", "no conflicts"],
+                                   hour: 15.5),
                 primaryLabel: "Book 3:30",
                 declineLabel: "Don't book",
                 alwaysSentence: "Always book time with anyone when I'm free",
@@ -402,7 +414,8 @@ final class DecisionEngine {
                                "Booking silently. It charges a deposit"]),
                 ticket: DeckTicket(eyebrow: "TONIGHT",
                                    headline: "7:45 PM",
-                                   lines: ["2 seats", "counter", "$40 hold"]),
+                                   lines: ["2 seats", "counter", "$40 hold"],
+                                   hour: 19.75),
                 primaryLabel: "Book it",
                 declineLabel: "Don't book",
                 alwaysSentence: "Always book tables at Marufuku",
@@ -968,11 +981,10 @@ private struct TimeSheet: View {
             Button { dismiss() } label: {
                 Text("Use this time")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(DS.Palette.onInk)
+                    .foregroundStyle(DS.Palette.ink)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
-                    .background(DS.Palette.ink,
-                                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+                    .glassSurface(radius: DK.wellRadius, emphasis: 1.6)
             }
             .buttonStyle(.plain)
             .padding(.top, 12)
@@ -1034,12 +1046,19 @@ private struct MessageThread: View {
 
             HStack {
                 Spacer(minLength: 44)
-                Group {
+                // A TextField takes every point it is offered, which left a
+                // gutter of blue between the text and the bubble's left edge.
+                // An invisible copy of the same string sizes the bubble; the
+                // field then fills exactly that. fixedSize cannot do this —
+                // it collapses a vertical-axis field to nothing.
+                ZStack(alignment: .leading) {
+                    Text(draft.isEmpty ? " " : draft)
+                        .opacity(0)
+                        .accessibilityHidden(true)
                     if editable {
                         TextField("", text: $draft, axis: .vertical)
                             .textFieldStyle(.plain)
                             .lineLimit(1 ... 5)
-                            .multilineTextAlignment(.trailing)
                             .focused(focused)
                             .tint(.white)
                     } else {
@@ -1083,7 +1102,9 @@ private struct MailReply: View {
                     .foregroundStyle(DS.Palette.inkMuted)
                 Spacer(minLength: 0)
             }
-            .frame(height: 26)
+            .frame(height: 30)
+
+            Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
 
             HStack(alignment: .top, spacing: 8) {
                 Text("RE")
@@ -1091,16 +1112,16 @@ private struct MailReply: View {
                     .kerning(1)
                     .foregroundStyle(DS.Palette.placeholder)
                     .frame(width: 26, alignment: .leading)
-                    .padding(.top, 3)
+                    .padding(.top, 11)
                 Text(incoming)
                     .font(.system(size: 14, weight: .light))
                     .foregroundStyle(DS.Palette.subtle)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 9)
                 Spacer(minLength: 0)
             }
-            .padding(.bottom, 12)
 
-            Rectangle().fill(Color.white.opacity(0.09)).frame(height: 1)
+            Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
 
             Group {
                 if editable {
@@ -1116,7 +1137,7 @@ private struct MailReply: View {
             .font(.system(size: 17))
             .foregroundStyle(DS.Palette.ink)
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.top, 12)
+            .padding(.vertical, 12)
         }
     }
 }
@@ -1416,6 +1437,17 @@ private struct AskCard: View {
             }
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.74), value: alwaysOpen)
+        // Anywhere off the menu closes it.
+        .overlay {
+            if alwaysOpen {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.snappy(duration: 0.2)) { alwaysOpen = false }
+                    }
+                    .zIndex(-1)
+            }
+        }
         .animation(.snappy(duration: 0.26), value: running)
         .sheet(isPresented: $traceShown) {
             if let trace = item.trace {
@@ -1484,6 +1516,33 @@ private struct AskCard: View {
                     alwaysOpen = false
                     engine.approve(item, always: false)
                 }
+
+                if !item.alwaysScopes.isEmpty {
+                    Button {
+                        withAnimation(.spring(response: 0.34, dampingFraction: 0.76)) {
+                            alwaysOpen.toggle()
+                        }
+                        _ = DSHaptics.tap(.light)
+                    } label: {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(DS.Palette.inkMuted)
+                            .frame(width: 46, height: 54)
+                            .rotationEffect(.degrees(alwaysOpen ? 180 : 0))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .glassSurface(radius: DK.wellRadius)
+                    .overlay(alignment: .bottomTrailing) {
+                        if alwaysOpen {
+                            scopeMenu
+                                .frame(width: 300)
+                                .alignmentGuide(.bottom) { $0[.top] - 8 }
+                                .transition(.scale(scale: 0.9, anchor: .bottomTrailing)
+                                    .combined(with: .opacity))
+                        }
+                    }
+                }
             }
         }
     }
@@ -1496,10 +1555,7 @@ private struct AskCard: View {
                     .foregroundStyle(DS.Palette.inkMuted)
                     .frame(height: 54)
                     .padding(.horizontal, 18)
-                    .background(.ultraThinMaterial,
-                                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1))
+                    .glassSurface(radius: DK.wellRadius)
             }
             .buttonStyle(.plain)
 
@@ -1535,9 +1591,15 @@ private struct AskCard: View {
                 }
             }
             .background(
-                LinearGradient(colors: [Color.white, Color(white: 0.88)],
+                LinearGradient(colors: [Color.primary.opacity(0.92), Color.primary.opacity(0.78)],
                                startPoint: .top, endPoint: .bottom),
                 in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+            .overlay {
+                Grain(opacity: 0.09)
+                    .clipShape(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+            }
+            .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
             // The menu FLOATS above the caret rather than sitting in the
             // layout: expanding it inside the row grew the card past its own
             // slot and pushed the whole deck out of alignment.
