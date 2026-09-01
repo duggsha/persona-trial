@@ -215,6 +215,19 @@ struct DeckRule: Identifiable, Equatable {
     var trail: [String] = []
 }
 
+/// A deferred action, held for the length of its toast.
+@MainActor
+final class UndoState: Identifiable {
+    let id = UUID()
+    let message: String
+    let restore: () -> Void
+    let commit: () -> Void
+
+    init(message: String, restore: @escaping () -> Void, commit: @escaping () -> Void) {
+        self.message = message; self.restore = restore; self.commit = commit
+    }
+}
+
 // MARK: Engine
 
 @MainActor @Observable
@@ -235,6 +248,12 @@ final class DecisionEngine {
                          "MAY 30 · you approved filing without opening the mail"]),
     ]
     var judgmentShown = false
+    /// The deferred-commit toast, exactly as the shipped app does it: the card
+    /// leaves the deck at once, this holds Undo, and the work does not start
+    /// until the window lapses. Undo inside the window means nothing ever
+    /// happened — no send to retract, no charge to reverse.
+    var undo: UndoState?
+    private var undoTask: Task<Void, Never>?
     /// Which card the deck is resting on. The composer reads it so one input
     /// can edit whatever you are looking at.
     var focusedID: UUID?
@@ -459,7 +478,71 @@ final class DecisionEngine {
         ]
     }
 
+    /// One approval, deferred. Matches the shipped executeSuggestion: take the
+    /// card out of the feed, show the toast, and only commit when it lapses.
     func approve(_ item: DeckItem, always: Bool, scope: String? = nil) {
+        flushUndo()
+        let ruleText = scope ?? item.alwaysSentence
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        withAnimation(.smooth(duration: 0.34)) { item.phase = .dismissed }
+
+        let state = UndoState(message: toastMessage(for: item)) { [weak self] in
+            withAnimation(.smooth(duration: 0.3)) { item.phase = .asking }
+            self?.declinePulse += 1
+        } commit: { [weak self] in
+            guard let self else { return }
+            if always, let ruleText, !rules.contains(where: { $0.sentence == ruleText }) {
+                rules.insert(DeckRule(sentence: ruleText, scope: scopeName(for: item.kind),
+                                      logo: item.logo, uses: 1,
+                                      trail: ["JUST NOW · you approved \"\(item.ask)\" and chose always"]),
+                             at: 0)
+            }
+            item.phase = .asking
+            run(item)
+            if always, item.kind == "send_draft" { graduate() }
+        }
+        _ = index
+        withAnimation(.smooth(duration: 0.28)) { undo = state }
+        undoTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(4))
+            if Task.isCancelled { return }
+            state.commit()
+            if undo?.id == state.id {
+                withAnimation(.smooth(duration: 0.22)) { undo = nil }
+            }
+            undoTask = nil
+        }
+    }
+
+    func takeUndo() {
+        guard let state = undo else { return }
+        undoTask?.cancel(); undoTask = nil
+        withAnimation(.smooth(duration: 0.22)) { undo = nil }
+        state.restore()
+    }
+
+    /// A pending commit that has not fired yet fires now, so two approvals in a
+    /// row cannot silently drop the first.
+    func commitUndoNow() { flushUndo() }
+
+    private func flushUndo() {
+        guard let state = undo else { return }
+        undoTask?.cancel(); undoTask = nil
+        undo = nil
+        state.commit()
+    }
+
+    private func toastMessage(for item: DeckItem) -> String {
+        switch item.kind {
+        case "send_draft": "Reply sent."
+        case "create_meeting": "Booked."
+        case "place": "Reserved."
+        case "update": "Calendar updated."
+        default: "Done."
+        }
+    }
+
+    private func legacyApprove(_ item: DeckItem, always: Bool, scope: String? = nil) {
         let ruleText = scope ?? item.alwaysSentence
         if always, let ruleText,
            !rules.contains(where: { $0.sentence == ruleText }) {
@@ -622,6 +705,22 @@ struct DeckScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.black)
+        // The toast owns the moment after an approval: the card is already
+        // gone, and this is the only thing standing between the tap and the
+        // work actually happening.
+        .overlay(alignment: .bottom) {
+            if let undo = engine.undo {
+                UndoToast(
+                    message: undo.message,
+                    onUndo: { engine.takeUndo() },
+                    // Swiping it away means "I don't need the undo", so the
+                    // work starts immediately instead of waiting out the clock.
+                    onDismiss: { engine.commitUndoNow() }
+                )
+                .padding(.bottom, 92)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .onAppear { engine.seed() }
         // The moments that should be felt, not just seen.
         .sensoryFeedback(.selection, trigger: focused)
