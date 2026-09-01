@@ -29,7 +29,7 @@ public struct DesignTrialHost: View {
     /// own swipe, exactly as in the app.
     @State private var page: PersonaPage = .home
     /// The menu button's slide-over.
-    @State private var sidebarOpen = false
+    @State private var profileShown = false
     @State private var settingsShown = false
     /// The transcript, live: voice mode appends to it.
     @State private var chatLog: [ChatMessage] = []
@@ -67,7 +67,7 @@ public struct DesignTrialHost: View {
                     page: $page,
                     homeScrolled: page == .home && scrolledUnderHeader,
                     avatarUrl: profile.avatarUrl,
-                    onLogo: { sidebarOpen = true },
+                    onLogo: { profileShown = true },
                     onJudgment: { DecisionEngine.shared.judgmentShown = true }
                 )
                 .frame(maxHeight: .infinity, alignment: .top)
@@ -79,27 +79,21 @@ public struct DesignTrialHost: View {
                 bottomComposer(keyboardUp: geo.safeAreaInsets.bottom > 100)
                     .frame(maxHeight: .infinity, alignment: .bottom)
 
-                // The menu button's actual destination. Above everything —
-                // header included — because it IS the navigation.
-                if voiceShown {
-                    VoiceOverlay { completeVoiceFlow() }
-                        .transition(.opacity)
-                        .zIndex(30)
-                }
-
-                TrialSidebar(
-                    isOpen: $sidebarOpen,
-                    page: page,
+            }
+            .sheet(isPresented: $profileShown) {
+                ProfileSheet(
                     onHome: { withAnimation(DS.Motion.page) { page = .home } },
                     onChat: { showChat() },
                     onJudgment: { DecisionEngine.shared.judgmentShown = true },
                     onSettings: { settingsShown = true }
                 )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: Bindable(DecisionEngine.shared).judgmentShown) {
                 JudgmentSheet()
                     .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.hidden)
+                    .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $settingsShown) {
                 SettingsSheet()

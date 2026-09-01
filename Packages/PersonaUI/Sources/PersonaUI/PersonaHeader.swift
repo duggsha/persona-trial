@@ -53,11 +53,13 @@ struct PersonaHeader: View {
 
                 Spacer(minLength: 0)
 
-                // The whole capsule remains one Home ⇄ Chat toggle.
-                Button {
-                    withAnimation(DS.Motion.page) { page = page == .home ? .chat : .home }
-                } label: {
-                    HStack(spacing: 15) {
+                // Each half navigates to ITS page. It read as a toggle before,
+                // so tapping Home while on Home threw you into Chat — a
+                // control that punishes you for confirming where you are.
+                HStack(spacing: 15) {
+                    Button {
+                        withAnimation(DS.Motion.page) { page = .home }
+                    } label: {
                         toggleIcon(.home, symbol: "house.fill", size: 17, weight: .semibold)
                             .overlay(alignment: .topTrailing) {
                                 if homeUnreadCount > 0, page != .home {
@@ -67,6 +69,13 @@ struct PersonaHeader: View {
                                 }
                             }
                             .animation(.snappy(duration: 0.24), value: homeUnreadCount)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.hapticTap)
+
+                    Button {
+                        withAnimation(DS.Motion.page) { page = .chat }
+                    } label: {
                         toggleIcon(.chat, symbol: "text.bubble", size: 16, weight: .medium)
                             .overlay(alignment: .topTrailing) {
                                 if chatUnreadCount > 0, page != .chat {
@@ -76,12 +85,12 @@ struct PersonaHeader: View {
                                 }
                             }
                             .animation(.snappy(duration: 0.24), value: chatUnreadCount)
+                            .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 12)
-                    .frame(height: 42)
-                    .contentShape(Capsule(style: .continuous))
+                    .buttonStyle(.hapticTap)
                 }
-                .buttonStyle(.hapticTap)
+                .padding(.horizontal, 12)
+                .frame(height: 42)
                 .smallGlassCapsule()
                 .accessibilityIdentifier("header-page-toggle")
 

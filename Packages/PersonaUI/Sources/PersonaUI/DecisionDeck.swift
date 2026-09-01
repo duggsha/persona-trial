@@ -81,6 +81,7 @@ struct DeckRule: Identifiable, Equatable {
     let id = UUID()
     let sentence: String
     let scope: String
+    let logo: IrisLogo
     var uses: Int
 }
 
@@ -92,9 +93,9 @@ final class DecisionEngine {
 
     var items: [DeckItem] = []
     var rules: [DeckRule] = [
-        DeckRule(sentence: "Keep travel plans current", scope: "Calendar", uses: 7),
-        DeckRule(sentence: "Move gym bookings when classes clash", scope: "Calendar", uses: 4),
-        DeckRule(sentence: "File receipts into Notion", scope: "Mail", uses: 12),
+        DeckRule(sentence: "Keep travel plans current", scope: "Calendar", logo: .calendar, uses: 7),
+        DeckRule(sentence: "Move gym bookings when classes clash", scope: "Calendar", logo: .calendar, uses: 4),
+        DeckRule(sentence: "File receipts into Notion", scope: "Mail", logo: .mail, uses: 12),
     ]
     var judgmentShown = false
     private var graduated = false
@@ -140,7 +141,7 @@ final class DecisionEngine {
                 kind: "create_meeting", source: "JASON MEHTA · MAIL", logo: .calendar,
                 avatarAsset: "AvatarJason",
                 ask: "Give Jason 30 minutes Wednesday?",
-                context: "Firmware timeline. Wednesday is open after 3.",
+                context: "",
                 facts: "WED · 3:30 – 4:00 PM · INVITE TO JASON",
                 primaryLabel: "Book 3:30",
                 alwaysSentence: "Always schedule when my calendar is open",
@@ -155,8 +156,8 @@ final class DecisionEngine {
             DeckItem(
                 kind: "place", source: "RESY", logo: .resy,
                 ask: "Take the 7:45 at Marufuku?",
-                context: "Two counter seats — the last slot before 9.",
-                facts: "TONIGHT · 7:45 · FREE CANCEL TO 6",
+                context: "",
+                facts: "TONIGHT · 7:45 · 2 SEATS · FREE CANCEL TO 6",
                 primaryLabel: "Book it",
                 alwaysSentence: "Always grab tables at places I've saved",
                 steps: [
@@ -169,8 +170,8 @@ final class DecisionEngine {
             DeckItem(
                 kind: "update", source: "DELTA 1187", logo: .delta,
                 ask: "Move your Austin flight alarm?",
-                context: "Moved up 40 minutes. Gate unchanged.",
-                facts: "SFO → AUS · 9:05 AM · GATE C11",
+                context: "",
+                facts: "SFO → AUS · 9:05 AM · MOVED UP 40 MIN",
                 primaryLabel: "Update calendar",
                 steps: [DeckRunStep(logo: .calendar, text: "Calendar moved to 9:05", detail: "DL 1187 · gate C11")],
                 receiptLine: "Austin flight — calendar moved to 9:05 AM.",
@@ -183,7 +184,7 @@ final class DecisionEngine {
     func approve(_ item: DeckItem, always: Bool) {
         if always, let sentence = item.alwaysSentence,
            !rules.contains(where: { $0.sentence == sentence }) {
-            rules.insert(DeckRule(sentence: sentence, scope: scope(for: item.kind), uses: 1), at: 0)
+            rules.insert(DeckRule(sentence: sentence, scope: scope(for: item.kind), logo: item.logo, uses: 1), at: 0)
         }
         run(item)
         if always, item.kind == "send_draft" { graduate() }
@@ -231,7 +232,7 @@ final class DecisionEngine {
             let born = DeckItem(
                 kind: "send_draft", source: "PRIYA NAIR · MAIL", logo: .mail,
                 ask: "Reply to Priya about the deck?",
-                context: "She asked for the three changed slides before the review.",
+                context: "She asked for the three changed slides.",
                 draft: "Attached — the three slides that changed since last quarter.",
                 primaryLabel: "Send reply",
                 steps: [DeckRunStep(logo: .mail, text: "Sent as you", detail: "3 slides attached")],
@@ -590,7 +591,7 @@ private struct AskCard: View {
             HStack(spacing: 8) {
                 Button { engine.decline(item) } label: {
                     Text(item.declineLabel)
-                        .font(.system(size: 15.5, weight: .medium))
+                        .font(.system(size: 15.5, weight: .regular))
                         .foregroundStyle(DS.Palette.inkMuted)
                         .frame(height: 50)
                         .padding(.horizontal, 16)
@@ -605,7 +606,7 @@ private struct AskCard: View {
                         engine.approve(item, always: false)
                     } label: {
                         Text(item.primaryLabel)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(DS.Palette.onInk)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
@@ -648,7 +649,7 @@ private struct AskCard: View {
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 Text(sentence)
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(DS.Palette.ink)
                 Text("Approves this one too. Undo any time in Judgment.")
                     .font(.system(size: 12))
@@ -678,7 +679,7 @@ private struct AskCard: View {
                         .saturation(state == 0 ? 0 : 1)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(step.text)
-                            .font(.system(size: 15, weight: state == 1 ? .semibold : .regular))
+                            .font(.system(size: 15.5, weight: .regular))
                             .foregroundStyle(state == 0 ? DS.Palette.placeholder : DS.Palette.inkMuted)
                         if state >= 1, let detail = step.detail {
                             Text(detail)
@@ -827,7 +828,7 @@ private struct ReceiptRow: View {
             IrisLogoTile(logo: .check, size: 20)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.receiptLine)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(DS.Palette.inkMuted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let rule = item.ranUnderRule {
@@ -937,7 +938,7 @@ private struct BriefAskRow: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.ask)
-                        .font(.system(size: 16.5, weight: .semibold))
+                        .font(.system(size: 17, weight: .regular))
                         .foregroundStyle(DS.Palette.ink)
                     Text(item.context)
                         .font(.system(size: 13.5))
@@ -992,78 +993,51 @@ private struct BriefAskRow: View {
 
 struct JudgmentSheet: View {
     var engine: DecisionEngine = .shared
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                HStack(spacing: 7) {
-                    Image(systemName: "brain")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("JUDGMENT")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .kerning(1.4)
-                }
-                .foregroundStyle(DS.Palette.ink)
-                Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(DS.Palette.subtle)
-                        .frame(width: 28, height: 28)
-                        .background(DS.Palette.surfaceMuted, in: Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 6)
-
-            Text("Everything Iris may do without asking. Each learned from your own approvals.")
-                .font(.system(size: 12.5))
+        SheetChrome(title: "Judgment") {
+            Text("What Iris may do without asking. Each one learned from an approval you gave.")
+                .font(.system(size: 14.5, weight: .regular))
                 .foregroundStyle(DS.Palette.subtle)
-                .padding(.horizontal, 20).padding(.bottom, 14)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 22)
 
-            ScrollView {
-                VStack(spacing: 8) {
-                    ForEach(engine.rules) { rule in
-                        HStack(spacing: 10) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(rule.sentence)
-                                    .font(.system(size: 14.5, weight: .medium))
-                                    .foregroundStyle(DS.Palette.ink)
-                                Text("\(rule.scope.uppercased()) · USED \(rule.uses)×")
-                                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
-                                    .kerning(0.8)
-                                    .foregroundStyle(DS.Palette.placeholder)
-                            }
-                            Spacer()
-                            Button {
-                                withAnimation(.snappy(duration: 0.25)) { engine.deleteRule(rule) }
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(DS.Palette.subtle)
-                                    .frame(width: 26, height: 26)
-                                    .background(DS.Palette.surfaceMuted,
-                                                in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
+            SheetSection(title: "Standing rules") {
+                ForEach(Array(engine.rules.enumerated()), id: \.element.id) { index, rule in
+                    if index > 0 { SheetDivider() }
+                    HStack(spacing: 13) {
+                        IrisLogoTile(logo: rule.logo, size: 22)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(rule.sentence)
+                                .font(.system(size: 15.5, weight: .regular))
+                                .foregroundStyle(DS.Palette.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("USED \(rule.uses)×")
+                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                .kerning(0.9)
+                                .foregroundStyle(DS.Palette.placeholder)
                         }
-                        .padding(12)
-                        .background(DS.Palette.card,
-                                    in: RoundedRectangle(cornerRadius: DK.wellRadius + 2, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: DK.wellRadius + 2, style: .continuous)
-                            .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
+                        Spacer(minLength: 8)
+                        Button {
+                            withAnimation(.snappy(duration: 0.25)) { engine.deleteRule(rule) }
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(DS.Palette.placeholder)
+                                .frame(width: 30, height: 30)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 56)
                 }
-                .padding(.horizontal, 20)
             }
 
             Text("Delete a rule and Iris asks again.")
-                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .font(.system(size: 12.5, weight: .regular))
                 .foregroundStyle(DS.Palette.placeholder)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
         }
-        .presentationBackground(.thinMaterial)
     }
 }

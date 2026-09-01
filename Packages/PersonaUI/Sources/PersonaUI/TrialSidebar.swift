@@ -1,153 +1,194 @@
 import SwiftUI
 import PersonaDesign
 
-/// The menu. Modelled on the sidebars people actually live in — account up
-/// top, destinations, recent conversations, search at the bottom — drawn in
-/// this app's ink instead of anyone else's brand.
-struct TrialSidebar: View {
-    @Binding var isOpen: Bool
-    let page: PersonaPage
+/// Shared chrome for every sheet in this build: a close disc, a centred
+/// title, and grouped rows on one glass plate. Settings set the language;
+/// Profile and Judgment speak it too, so the app has one sheet, not three.
+struct SheetChrome<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                Text(title)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(DS.Palette.ink)
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(DS.Palette.inkMuted)
+                            .frame(width: 34, height: 34)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .smallGlassCircle()
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 18)
+
+            ScrollView { content.padding(.horizontal, 18).padding(.bottom, 30) }
+        }
+        .presentationBackground(DS.Palette.canvas)
+    }
+}
+
+/// A titled group of rows on one plate.
+struct SheetSection<Content: View>: View {
+    var title: String?
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let title {
+                Text(title.uppercased())
+                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                    .kerning(1.2)
+                    .foregroundStyle(DS.Palette.placeholder)
+                    .padding(.leading, 4)
+            }
+            VStack(spacing: 0) { content }
+                .background {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(LinearGradient(colors: [Color.white.opacity(0.05),
+                                                              Color.white.opacity(0.012)],
+                                                     startPoint: .top, endPoint: .bottom))
+                        }
+                }
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
+        }
+        .padding(.bottom, 18)
+    }
+}
+
+struct SheetRow<Trailing: View>: View {
+    let symbol: String
+    let label: String
+    var tint: Color?
+    var action: (() -> Void)?
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        let row = HStack(spacing: 13) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(tint ?? DS.Palette.inkMuted)
+                .frame(width: 22)
+            Text(label)
+                .font(.system(size: 15.5, weight: .regular))
+                .foregroundStyle(tint ?? DS.Palette.ink)
+            Spacer()
+            trailing
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 52)
+        .contentShape(Rectangle())
+
+        if let action {
+            Button(action: action) { row }.buttonStyle(.plain)
+        } else {
+            row
+        }
+    }
+}
+
+struct SheetDivider: View {
+    var body: some View {
+        Rectangle().fill(DS.Palette.hairlineSoft).frame(height: 1).padding(.leading, 49)
+    }
+}
+
+struct SheetChevron: View {
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(DS.Palette.placeholder)
+    }
+}
+
+// MARK: - Profile (what the menu button opens)
+
+struct ProfileSheet: View {
     let onHome: () -> Void
     let onChat: () -> Void
     let onJudgment: () -> Void
     let onSettings: () -> Void
-
-    private let recents = [
-        "Jason's 30 minutes",
-        "Dinner at Marufuku",
-        "Sarah — Thursday reply",
-    ]
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            if isOpen {
-                Color.black.opacity(0.55)
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-                    .onTapGesture { close() }
-
-                panel
-                    .transition(.move(edge: .leading))
-            }
-        }
-        .animation(.snappy(duration: 0.28, extraBounce: 0), value: isOpen)
-        .sensoryFeedback(.impact(weight: .light), trigger: isOpen)
-    }
-
-    private var panel: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Account, first. The app is signed in; the menu should say so.
-            HStack(spacing: 12) {
+        SheetChrome(title: "Profile") {
+            VStack(spacing: 0) {
                 PersonaAsset.image("AvatarShaurya")
                     .resizable().scaledToFill()
-                    .frame(width: 44, height: 44)
+                    .frame(width: 92, height: 92)
                     .clipShape(Circle())
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Shaurya Duggal")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(DS.Palette.ink)
-                    Text("IRIS PRO")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .kerning(1.1)
+                    .padding(.bottom, 14)
+                Text("Shaurya Duggal")
+                    .font(.system(size: 21, weight: .regular))
+                    .foregroundStyle(DS.Palette.ink)
+                Text("duggalshaurya1234@gmail.com")
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(DS.Palette.subtle)
+                Text("IRIS PRO · JOINED MARCH 2026")
+                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                    .kerning(1)
+                    .foregroundStyle(DS.Palette.placeholder)
+                    .padding(.top, 6)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 26)
+
+            SheetSection(title: "This week") {
+                SheetRow(symbol: "checkmark.seal", label: "Handled without asking") {
+                    Text("14").font(.system(size: 15, design: .monospaced))
+                        .foregroundStyle(DS.Palette.subtle)
+                }
+                SheetDivider()
+                SheetRow(symbol: "hand.raised", label: "Asked you") {
+                    Text("6").font(.system(size: 15, design: .monospaced))
+                        .foregroundStyle(DS.Palette.subtle)
+                }
+                SheetDivider()
+                SheetRow(symbol: "arrow.uturn.backward", label: "Undone") {
+                    Text("1").font(.system(size: 15, design: .monospaced))
+                        .foregroundStyle(DS.Palette.subtle)
+                }
+            }
+
+            SheetSection(title: "Go to") {
+                SheetRow(symbol: "house", label: "Home", action: { dismiss(); onHome() }) { SheetChevron() }
+                SheetDivider()
+                SheetRow(symbol: "text.bubble", label: "Chat", action: { dismiss(); onChat() }) { SheetChevron() }
+                SheetDivider()
+                SheetRow(symbol: "brain", label: "Judgment", action: { dismiss(); onJudgment() }) { SheetChevron() }
+                SheetDivider()
+                SheetRow(symbol: "gearshape", label: "Settings", action: { dismiss(); onSettings() }) { SheetChevron() }
+            }
+
+            SheetSection(title: "More") {
+                SheetRow(symbol: "questionmark.circle", label: "Help", action: {}) {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(DS.Palette.placeholder)
                 }
-                Spacer()
+                SheetDivider()
+                SheetRow(symbol: "rectangle.portrait.and.arrow.right", label: "Sign out", action: {}) { EmptyView() }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 76)
-            .padding(.bottom, 22)
 
-            row("house.fill", "Home", active: page == .home) { close(); onHome() }
-            row("text.bubble", "Chat", active: page == .chat) { close(); onChat() }
-            row("brain", "Judgment", active: false) { close(); onJudgment() }
-            row("gearshape.fill", "Settings", active: false) { close(); onSettings() }
-
-            Text("RECENT")
-                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
-                .kerning(1.2)
+            Text("IRIS 1.0 (TRIAL)")
+                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                .kerning(1)
                 .foregroundStyle(DS.Palette.placeholder)
-                .padding(.horizontal, 22)
-                .padding(.top, 26)
-                .padding(.bottom, 8)
-
-            ForEach(recents, id: \.self) { title in
-                Button { close(); onChat() } label: {
-                    Text(title)
-                        .font(.system(size: 15))
-                        .foregroundStyle(DS.Palette.inkMuted)
-                        .lineLimit(1)
-                        .padding(.horizontal, 22)
-                        .frame(height: 38)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-
-            Spacer(minLength: 0)
-
-            // The bottom rail: search and a new thread, the two things a
-            // sidebar is opened for when it isn't navigation.
-            HStack(spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(DS.Palette.placeholder)
-                    Text("Search")
-                        .font(.system(size: 14))
-                        .foregroundStyle(DS.Palette.placeholder)
-                    Spacer()
-                }
-                .padding(.horizontal, 13)
-                .frame(height: 42)
-                .contentShape(Capsule())
-                .smallGlassCapsule()
-
-                Button { close(); onChat() } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(DS.Palette.ink)
-                        .frame(width: 42, height: 42)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .smallGlassCircle()
-            }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 28)
+                .frame(maxWidth: .infinity)
         }
-        .frame(width: 308, alignment: .leading)
-        .frame(maxHeight: .infinity)
-        // Native drawer glass: the system material does the frosting, a thin
-        // canvas wash keeps type contrast honest over bright content.
-        .background(.ultraThinMaterial)
-        .background(DS.Palette.canvas.opacity(0.6))
-        .overlay(alignment: .trailing) {
-            Rectangle().fill(DS.Palette.hairlineSoft).frame(width: 1)
-        }
-        .ignoresSafeArea()
     }
-
-    private func row(_ symbol: String, _ label: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(width: 24)
-                Text(label)
-                    .font(.system(size: 17, weight: active ? .semibold : .medium))
-                Spacer()
-            }
-            .foregroundStyle(active ? DS.Palette.ink : DS.Palette.inkMuted)
-            .padding(.horizontal, 14)
-            .frame(height: 50)
-            .background(active ? DS.Palette.surfaceMuted : .clear,
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .contentShape(Rectangle())
-            .padding(.horizontal, 8)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func close() { isOpen = false }
 }
