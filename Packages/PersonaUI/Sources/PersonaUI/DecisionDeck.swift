@@ -722,7 +722,11 @@ struct DeckScreen: View {
                         }
                         .transition(.asymmetric(
                             insertion: .offset(y: 16).combined(with: .opacity),
-                            removal: .offset(x: 140).combined(with: .opacity)))
+                            // Off the right edge and gone: a handled card
+                            // should leave the deck, not dissolve in place.
+                            removal: .move(edge: .trailing)
+                                .combined(with: .opacity)
+                                .combined(with: .scale(scale: 0.94))))
                     }
 
                 }
@@ -812,67 +816,63 @@ private struct TrackerCard: View {
                     .padding(.horizontal, DK.pad)
                     .frame(height: 48)
 
-                if let tracker = item.tracker {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-                        HStack(alignment: .top, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 5) {
+                if let tracker = item.tracker {
+                    // A live activity is a COMPACT block: name, headline, one
+                    // line under it, the track. Spreading those four things
+                    // down a full card is what stopped it reading like one.
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(alignment: .center, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 4) {
                                 Text(tracker.headline)
-                                    .font(.system(size: 30, weight: .semibold))
-                                    .tracking(-0.6)
+                                    .font(.system(size: 28, weight: .semibold))
+                                    .tracking(-0.5)
                                     .foregroundStyle(DS.Palette.ink)
                                 Text(tracker.detail)
                                     .font(.system(size: 14))
                                     .foregroundStyle(DS.Palette.subtle)
+                                    .lineLimit(2)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer(minLength: 0)
                             if let asset = tracker.courierAsset {
                                 PersonaAsset.image(asset)
                                     .resizable().scaledToFill()
-                                    .frame(width: 52, height: 52)
+                                    .frame(width: 56, height: 56)
                                     .clipShape(Circle())
-                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 2))
+                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.9), lineWidth: 2))
                             }
                         }
 
                         RunTrack(progress: tracker.progress, glyph: tracker.glyph)
-                            .padding(.top, 22)
-
-                        Spacer(minLength: 20)
-
-                        // The contents sit at the FOOT of the card on purpose:
-                        // that band is what the next card sees of this one, and
-                        // a peek of empty plate says nothing about what is in
-                        // the bag.
-                        if !tracker.items.isEmpty {
-                            VStack(spacing: 0) {
-                                ForEach(Array(tracker.items.enumerated()), id: \.offset) { index, line in
-                                    if index > 0 {
-                                        Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
-                                    }
-                                    HStack {
-                                        Text(line)
-                                            .font(.system(size: 13.5))
-                                            .foregroundStyle(DS.Palette.subtle)
-                                        Spacer(minLength: 0)
-                                    }
-                                    .frame(height: 38)
-                                    .padding(.horizontal, 14)
-                                }
-                            }
-                            .background(.ultraThinMaterial,
-                                        in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
-                        }
+                            .padding(.top, 18)
                     }
                     .padding(.horizontal, DK.pad)
-                    .padding(.bottom, DK.pad)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                }
 
+                    Spacer(minLength: 0)
+
+                    if !tracker.items.isEmpty {
+                        VStack(spacing: 0) {
+                            ForEach(Array(tracker.items.enumerated()), id: \.offset) { index, line in
+                                if index > 0 {
+                                    Rectangle().fill(Color.primary.opacity(0.06)).frame(height: 1)
+                                }
+                                HStack {
+                                    Text(line)
+                                        .font(.system(size: 13.5))
+                                        .foregroundStyle(DS.Palette.subtle)
+                                    Spacer(minLength: 0)
+                                }
+                                .frame(height: 38)
+                                .padding(.horizontal, 14)
+                            }
+                        }
+                        .glassSurface(radius: DK.wellRadius)
+                        .padding(.horizontal, DK.pad)
+                        .padding(.bottom, DK.pad)
+                    }
+                }
             }
         }
     }
@@ -1524,35 +1524,41 @@ private struct AskCard: View {
                 }
                 .buttonStyle(.plain)
 
-                HoldToApprove(label: item.primaryLabel) {
-                    alwaysOpen = false
-                    engine.approve(item, always: false)
-                }
-
-                if !item.alwaysScopes.isEmpty {
-                    Button {
-                        withAnimation(.spring(response: 0.34, dampingFraction: 0.76)) {
-                            alwaysOpen.toggle()
-                        }
-                        _ = DSHaptics.tap(.light)
-                    } label: {
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(DS.Palette.inkMuted)
-                            .frame(width: 46, height: 54)
-                            .rotationEffect(.degrees(alwaysOpen ? 180 : 0))
-                            .contentShape(Rectangle())
+                HStack(spacing: 0) {
+                    HoldToApprove(label: item.primaryLabel) {
+                        alwaysOpen = false
+                        engine.approve(item, always: false)
                     }
-                    .buttonStyle(.plain)
-                    .glassSurface(radius: DK.wellRadius)
-                    .overlay(alignment: .bottomTrailing) {
-                        if alwaysOpen {
-                            scopeMenu
-                                .frame(width: 300)
-                                .alignmentGuide(.bottom) { $0[.top] - 8 }
-                                .transition(.scale(scale: 0.9, anchor: .bottomTrailing)
-                                    .combined(with: .opacity))
+
+                    if !item.alwaysScopes.isEmpty {
+                        Button {
+                            withAnimation(.spring(response: 0.34, dampingFraction: 0.76)) {
+                                alwaysOpen.toggle()
+                            }
+                            _ = DSHaptics.tap(.light)
+                        } label: {
+                            Image(systemName: "chevron.up")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(DS.Palette.inkMuted)
+                                .frame(width: 44, height: 54)
+                                .rotationEffect(.degrees(alwaysOpen ? 180 : 0))
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .overlay(alignment: .leading) {
+                            Rectangle().fill(Color.primary.opacity(0.12))
+                                .frame(width: 1, height: 22)
+                        }
+                    }
+                }
+                .glassSurface(radius: DK.wellRadius)
+                .overlay(alignment: .bottomTrailing) {
+                    if alwaysOpen {
+                        scopeMenu
+                            .frame(width: 300)
+                            .alignmentGuide(.bottom) { $0[.top] - 8 }
+                            .transition(.scale(scale: 0.9, anchor: .bottomTrailing)
+                                .combined(with: .opacity))
                     }
                 }
             }

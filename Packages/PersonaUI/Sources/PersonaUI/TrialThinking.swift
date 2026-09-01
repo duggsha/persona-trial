@@ -230,7 +230,7 @@ struct HoldToApprove: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(.clear)
                 .overlay(alignment: .leading) {
                     // The fill IS the progress. No separate spinner, no ring
                     // orbiting a label — the button becomes the indicator.
@@ -241,8 +241,6 @@ struct HoldToApprove: View {
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
 
             HStack(spacing: 7) {
                 Image(systemName: done ? "checkmark" : "hand.tap.fill")
@@ -356,7 +354,7 @@ struct WorkingFace: View {
             // height is going, which is how three steps ended up spread down a
             // whole card with canyons between them.
             VStack(alignment: .leading, spacing: 15) {
-                    ForEach(Array(item.steps.enumerated()), id: \.element.id) { index, step in
+                    ForEach(Array(item.steps.prefix(current + 1).enumerated()), id: \.element.id) { index, step in
                         let state = index < current ? 2 : (index == current ? 1 : 0)
                         HStack(alignment: .top, spacing: 13) {
                             ZStack {
@@ -388,7 +386,9 @@ struct WorkingFace: View {
                             }
                             Spacer(minLength: 0)
                         }
-                        .opacity(state == 0 ? 0.4 : 1)
+                        .transition(.asymmetric(
+                            insertion: .offset(y: 8).combined(with: .opacity),
+                            removal: .opacity))
                     }
 
                     if item.phase == .done {
@@ -424,16 +424,9 @@ struct WorkingFace: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 15))
                         .foregroundStyle(DS.Palette.danger)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Didn't go through")
-                            .font(.system(size: 14.5, weight: .medium))
-                            .foregroundStyle(DS.Palette.ink)
-                        if let line = item.failureLine {
-                            Text(line)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(DS.Palette.placeholder)
-                        }
-                    }
+                    Text("Didn't go through")
+                        .font(.system(size: 14.5, weight: .medium))
+                        .foregroundStyle(DS.Palette.ink)
                     Spacer(minLength: 8)
                     Button { engine.retry(item) } label: {
                         Text("Try again")
