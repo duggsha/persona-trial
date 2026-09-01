@@ -301,7 +301,8 @@ struct DeckScreen: View {
     private var greetingRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text("Welcome back, Shaurya.")
-                .font(.system(size: 30, weight: .thin))
+                .font(DS.Typography.greeting)
+                .tracking(-0.24)
                 .foregroundStyle(DS.Palette.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -356,24 +357,32 @@ struct DeckScreen: View {
             // The focused card starts right under the controls; almost all of
             // the spare height goes below it, so the next card's head reads
             // and the previous card keeps a sliver above.
+            // Equal peeks: every focused card shows the same share of the
+            // previous card's tail and the next card's head.
             let spare = height - slot
-            let topMargin: CGFloat = 6
-            let bottomMargin = max(12, spare - topMargin - 66)
+            let topMargin = spare / 2
+            let bottomMargin = spare / 2
 
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 10) {
-                    greetingRow
-                        .id("greet")
-                        .scrollTransition(axis: .vertical) { content, phase in
-                            content.opacity(phase.isIdentity ? 1 : 0)
-                        }
-
                     ForEach(engine.asks) { item in
-                        Group {
-                            if item.kind == "code" {
-                                CodeCard(item: item)
-                            } else {
-                                AskCard(item: item, engine: engine)
+                        // The greeting shares the FIRST slot with the first
+                        // card: one snap unit, so the opening swipe lands on
+                        // card two, and only the first card has words instead
+                        // of a previous card peeking above it.
+                        VStack(alignment: .leading, spacing: 12) {
+                            if item.id == engine.asks.first?.id {
+                                greetingRow
+                                    .scrollTransition(axis: .vertical) { content, phase in
+                                        content.opacity(phase.isIdentity ? 1 : 0)
+                                    }
+                            }
+                            Group {
+                                if item.kind == "code" {
+                                    CodeCard(item: item)
+                                } else {
+                                    AskCard(item: item, engine: engine)
+                                }
                             }
                         }
                         .frame(height: slot)
@@ -411,6 +420,14 @@ struct DeckScreen: View {
 }
 
 // MARK: - Shared card chrome
+
+/// The 1px rule that turns a dark rectangle into an instrument: full-bleed
+/// inside the card, separating the strata — source, body, actions.
+private struct LedgerLine: View {
+    var body: some View {
+        Rectangle().fill(DS.Palette.hairlineSoft).frame(height: 1)
+    }
+}
 
 private struct DeckPlate<Content: View>: View {
     var emphasized = false
@@ -465,41 +482,54 @@ private struct AskCard: View {
 
     var body: some View {
         DeckPlate(emphasized: true) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 SourceRow(item: item)
+                    .padding(.horizontal, DK.pad)
+                    .frame(height: 44)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(item.ask)
-                        .font(.system(size: 26, weight: .semibold))
-                        .foregroundStyle(DS.Palette.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(item.context)
-                        .font(.system(size: 16.5))
-                        .foregroundStyle(DS.Palette.subtle)
-                        .fixedSize(horizontal: false, vertical: true)
+                LedgerLine()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.ask)
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundStyle(DS.Palette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(item.context)
+                            .font(.system(size: 16.5))
+                            .foregroundStyle(DS.Palette.subtle)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let facts = item.facts {
+                        Text(facts)
+                            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                            .kerning(0.6)
+                            .foregroundStyle(DS.Palette.inkMuted)
+                    }
+
+                    if item.draft != nil, !alwaysOpen, !running { draftWell }
                 }
-
-                if let facts = item.facts {
-                    Text(facts)
-                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                        .kerning(0.6)
-                        .foregroundStyle(DS.Palette.inkMuted)
-                }
-
-                if item.draft != nil, !alwaysOpen, !running { draftWell }
-
-                Spacer(minLength: 0)
+                .padding(DK.pad)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
                 if alwaysOpen, let sentence = item.alwaysSentence, !running {
                     alwaysMenu(sentence)
+                        .padding(.horizontal, DK.pad)
+                        .padding(.bottom, 10)
                         .transition(.asymmetric(
                             insertion: .offset(y: 8).combined(with: .opacity),
                             removal: .opacity))
                 }
 
-                if running { runRail } else { actionRow }
+                LedgerLine()
+
+                Group {
+                    if running { runRail } else { actionRow }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
             }
-            .padding(DK.pad)
         }
         // The mechanical yes: double-tap anywhere on the focused card.
         .onTapGesture(count: 2) {
@@ -552,7 +582,7 @@ private struct AskCard: View {
     }
 
     private var actionRow: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 Button { engine.decline(item) } label: {
                     Text(item.declineLabel)
@@ -690,12 +720,16 @@ private struct CodeCard: View {
                 DeckPlate {
                     VStack(alignment: .leading, spacing: 0) {
                         SourceRow(item: item)
+                            .padding(.horizontal, DK.pad)
+                            .frame(height: 44)
+                        LedgerLine()
                         Spacer(minLength: 0)
                         Text(item.code ?? "")
                             .font(.system(size: 58, weight: .thin, design: .monospaced))
                             .kerning(3)
                             .foregroundStyle(expired ? DS.Palette.placeholder : DS.Palette.ink)
                             .frame(maxWidth: .infinity)
+                            .padding(.horizontal, DK.pad)
                         Text(item.copied ? "COPIED" : (expired ? "EXPIRED" : "TAP TO COPY"))
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .kerning(1.4)
@@ -703,20 +737,23 @@ private struct CodeCard: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 10)
                         Spacer(minLength: 0)
-                        GeometryReader { proxy in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(DS.Palette.track).frame(height: 2)
-                                Capsule().fill(expired ? DS.Palette.placeholder : DS.Palette.ink)
-                                    .frame(width: proxy.size.width * (left / total), height: 2)
+                        LedgerLine()
+                        VStack(alignment: .leading, spacing: 8) {
+                            GeometryReader { proxy in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(DS.Palette.track).frame(height: 2)
+                                    Capsule().fill(expired ? DS.Palette.placeholder : DS.Palette.ink)
+                                        .frame(width: proxy.size.width * (left / total), height: 2)
+                                }
                             }
+                            .frame(height: 2)
+                            Text(expired ? "This code is dead." : "Expires in \(Int(left) / 60):\(String(format: "%02d", Int(left) % 60))")
+                                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                .foregroundStyle(DS.Palette.placeholder)
                         }
-                        .frame(height: 2)
-                        Text(expired ? "This code is dead." : "Expires in \(Int(left) / 60):\(String(format: "%02d", Int(left) % 60))")
-                            .font(.system(size: 11, weight: .regular, design: .monospaced))
-                            .foregroundStyle(DS.Palette.placeholder)
-                            .padding(.top, 10)
+                        .padding(.horizontal, DK.pad)
+                        .padding(.vertical, 12)
                     }
-                    .padding(DK.pad)
                 }
             }
             .buttonStyle(.plain)
