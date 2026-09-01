@@ -272,17 +272,19 @@ struct DeckScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Room for the floating header the host draws over this screen.
-            Spacer().frame(height: 118)
+            // Right under the floating header (its controls bottom out at
+            // ~113pt physical), not floating in the canvas.
+            Spacer().frame(height: 100)
 
             Text("Welcome back, Shaurya.")
                 .font(.system(size: 31, weight: .thin))
                 .foregroundStyle(DS.Palette.ink)
                 .padding(.horizontal, DK.gutter + 4)
-                .padding(.bottom, 12)
+                .padding(.bottom, 8)
 
             controlRow
                 .padding(.horizontal, DK.gutter + 4)
-                .padding(.bottom, 6)
+                .padding(.bottom, 2)
 
             switch mode {
             case .feed: pager
@@ -330,12 +332,11 @@ struct DeckScreen: View {
                         .font(.system(size: 8, weight: .bold))
                 }
                 .foregroundStyle(DS.Palette.inkMuted)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(DS.Palette.surfaceMuted,
-                            in: RoundedRectangle(cornerRadius: DK.chipRadius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: DK.chipRadius, style: .continuous)
-                    .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .contentShape(Capsule())
             }
+            .smallGlassCapsule()
 
             Button {
                 engine.judgmentShown = true
@@ -347,13 +348,12 @@ struct DeckScreen: View {
                         .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                 }
                 .foregroundStyle(DS.Palette.inkMuted)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(DS.Palette.surfaceMuted,
-                            in: RoundedRectangle(cornerRadius: DK.chipRadius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: DK.chipRadius, style: .continuous)
-                    .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .contentShape(Capsule())
             }
             .buttonStyle(.plain)
+            .smallGlassCapsule()
         }
     }
 
@@ -369,12 +369,12 @@ struct DeckScreen: View {
             // The focused card owns the screen; the neighbours' 25% keeps the
             // stack legible. Slot + two peeks + two gaps = the viewport.
             let slot = height * 0.70
-            // Asymmetric peeks: the composer floats over the bottom of the
-            // viewport, so the focused card sits high — the previous card's
-            // tail shows a sliver, the NEXT card's head gets the real estate.
+            // The focused card starts right under the controls; almost all of
+            // the spare height goes below it, so the next card's head reads
+            // and the previous card keeps a sliver above.
             let spare = height - slot
-            let topMargin = spare * 0.32
-            let bottomMargin = spare * 0.68
+            let topMargin: CGFloat = 14
+            let bottomMargin = spare - topMargin
 
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 10) {

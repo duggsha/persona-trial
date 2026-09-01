@@ -100,23 +100,28 @@ struct TrialSidebar: View {
                 }
                 .padding(.horizontal, 13)
                 .frame(height: 42)
-                .background(DS.Palette.surfaceMuted, in: Capsule())
+                .contentShape(Capsule())
+                .smallGlassCapsule()
 
                 Button { close(); onChat() } label: {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(DS.Palette.ink)
                         .frame(width: 42, height: 42)
-                        .background(DS.Palette.surfaceMuted, in: Circle())
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .smallGlassCircle()
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 28)
         }
         .frame(width: 308, alignment: .leading)
         .frame(maxHeight: .infinity)
-        .background(DS.Palette.canvas)
+        // Native drawer glass: the system material does the frosting, a thin
+        // canvas wash keeps type contrast honest over bright content.
+        .background(.ultraThinMaterial)
+        .background(DS.Palette.canvas.opacity(0.6))
         .overlay(alignment: .trailing) {
             Rectangle().fill(DS.Palette.hairlineSoft).frame(width: 1)
         }
