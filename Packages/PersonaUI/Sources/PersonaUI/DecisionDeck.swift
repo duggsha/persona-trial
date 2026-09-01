@@ -485,8 +485,8 @@ final class DecisionEngine {
     func approve(_ item: DeckItem, always: Bool, scope: String? = nil) {
         flushUndo()
         let ruleText = scope ?? item.alwaysSentence
-        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
-        withAnimation(.smooth(duration: 0.34)) { item.phase = .dismissed }
+        withAnimation(.smooth(duration: 0.3)) { item.phase = .running(0) }
+        stepPulse += 1
 
         let state = UndoState(message: toastMessage(for: item)) { [weak self] in
             withAnimation(.smooth(duration: 0.3)) { item.phase = .asking }
@@ -499,14 +499,12 @@ final class DecisionEngine {
                                       trail: ["JUST NOW · you approved \"\(item.ask)\" and chose always"]),
                              at: 0)
             }
-            item.phase = .asking
             run(item)
             if always, item.kind == "send_draft" { graduate() }
         }
-        _ = index
         withAnimation(.smooth(duration: 0.28)) { undo = state }
         undoTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(for: .seconds(3))
             if Task.isCancelled { return }
             state.commit()
             if undo?.id == state.id {
@@ -577,7 +575,7 @@ final class DecisionEngine {
 
     private func run(_ item: DeckItem) {
         guard !item.steps.isEmpty else { item.phase = .done; return }
-        item.phase = .running(0)
+        if case .running = item.phase {} else { item.phase = .running(0) }
         Task {
             for index in item.steps.indices {
                 withAnimation(.snappy(duration: 0.24)) { item.phase = .running(index) }
