@@ -34,6 +34,11 @@ public struct DesignTrialHost: View {
     @State private var chatLog: [ChatMessage] = []
     @State private var chatTrails: [UUID: ChatToolTrail] = [:]
     @State private var voiceShown = false
+    /// The + menu's destinations. Every one of them is a real page.
+    @State private var appsShown = false
+    @State private var photosShown = false
+    @State private var filesShown = false
+    @State private var cameraShown = false
     /// Live horizontal drag distance while a page swipe is in flight.
     @State private var dragX: CGFloat = 0
     /// Latched once a drag is decisively horizontal: the pages' vertical
@@ -56,8 +61,9 @@ public struct DesignTrialHost: View {
     public var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .top) {
-                SharedAppBackground()
-                    .ignoresSafeArea()
+                // Black, not near-black: the glass has nothing to lift off
+                // a grey ground.
+                Color.black.ignoresSafeArea()
 
                 pager(width: geo.size.width, safeHeight: geo.size.height)
 
@@ -109,6 +115,25 @@ public struct DesignTrialHost: View {
                 )
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
+            }
+            .sheet(isPresented: $appsShown) {
+                ConnectedAppsSheet()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+            }
+            .sheet(isPresented: $photosShown) {
+                PhotosSheet()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+            }
+            .sheet(isPresented: $filesShown) {
+                FilesSheet()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+            }
+            // The app's own camera, not a mock of one.
+            .fullScreenCover(isPresented: $cameraShown) {
+                CameraSheet(onDismiss: { cameraShown = false })
             }
             .sheet(isPresented: Bindable(DecisionEngine.shared).judgmentShown) {
                 JudgmentSheet()
@@ -269,10 +294,16 @@ public struct DesignTrialHost: View {
                 // a release-triggered HUD would never once appear in Xcode.)
                 onListeningBegan: { voiceShown = true },
                 voiceHandledExternally: true,
-                onCamera: {},
-                onPhotoLibrary: {},
-                onAttachFile: {},
-                quickActions: quickActions,
+                // Every one of these opens a real page.
+                onCamera: { cameraShown = true },
+                onPhotoLibrary: { photosShown = true },
+                onAttachFile: { filesShown = true },
+                quickActions: [
+                    ComposerAttachMenuItem(id: "apps", icon: "square.grid.2x2.fill",
+                                           label: "Apps") { appsShown = true },
+                    ComposerAttachMenuItem(id: "judgment", icon: "brain",
+                                           label: "Judgment") { DecisionEngine.shared.judgmentShown = true }
+                ],
                 assistantName: profile.assistantName
             )
             .padding(.horizontal, DS.Spacing.gutter)
@@ -364,10 +395,10 @@ struct HeaderScrim: View {
     var body: some View {
         LinearGradient(
             stops: [
-                .init(color: DS.Palette.canvas, location: 0),
-                .init(color: DS.Palette.canvas, location: 0.84),
-                .init(color: DS.Palette.canvas.opacity(0.55), location: 0.93),
-                .init(color: DS.Palette.canvas.opacity(0), location: 1)
+                .init(color: Color.black, location: 0),
+                .init(color: Color.black, location: 0.84),
+                .init(color: Color.black.opacity(0.55), location: 0.93),
+                .init(color: Color.black.opacity(0), location: 1)
             ],
             startPoint: .top, endPoint: .bottom
         )
@@ -385,10 +416,10 @@ struct FooterScrim: View {
     var body: some View {
         LinearGradient(
             stops: [
-                .init(color: DS.Palette.canvas.opacity(0), location: 0),
-                .init(color: DS.Palette.canvas.opacity(0.86), location: 0.28),
-                .init(color: DS.Palette.canvas, location: 0.46),
-                .init(color: DS.Palette.canvas, location: 1)
+                .init(color: Color.black.opacity(0), location: 0),
+                .init(color: Color.black.opacity(0.86), location: 0.28),
+                .init(color: Color.black, location: 0.46),
+                .init(color: Color.black, location: 1)
             ],
             startPoint: .top, endPoint: .bottom
         )

@@ -195,11 +195,11 @@ struct ProfileSheet: View {
                 }
                 SheetDivider()
                 SheetRow(symbol: "speaker.wave.2", label: "Ask out loud") {
-                    Toggle("", isOn: $speaks).labelsHidden().tint(DS.Palette.ink)
+                    Toggle("", isOn: $speaks).labelsHidden()
                 }
                 SheetDivider()
                 SheetRow(symbol: "bell", label: "Notifications") {
-                    Toggle("", isOn: $notifications).labelsHidden().tint(DS.Palette.ink)
+                    Toggle("", isOn: $notifications).labelsHidden()
                 }
             }
 

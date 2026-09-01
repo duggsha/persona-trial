@@ -364,7 +364,7 @@ struct DeckScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(DS.Palette.canvas)
+        .background(Color.black)
         .onAppear { engine.seed() }
         // The moments that should be felt, not just seen.
         .sensoryFeedback(.selection, trigger: focused)
@@ -375,7 +375,7 @@ struct DeckScreen: View {
     }
 
     private var greetingRow: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Text("Welcome back, Shaurya.")
                 .font(.system(size: 28, weight: .thin))
                 .tracking(-0.2)
@@ -500,6 +500,8 @@ private struct LedgerLine: View {
 
 private struct DeckPlate<Content: View>: View {
     var emphasized = false
+    /// The app this card came from, so the plate can carry its colour.
+    var accent: Color = .white
     /// Whether the plate stretches to its whole slot. Ask cards do not: a card
     /// padded out to a fixed height with nothing in the middle reads as a bug,
     /// not as breathing room. The code card does, because its one number is
@@ -515,7 +517,15 @@ private struct DeckPlate<Content: View>: View {
             // One surface: frosted dark glass over the canvas. No inner fills
             // anywhere — structure comes from the hairline strata, never from
             // patches of a second grey.
-            .background(DS.Palette.card.opacity(0.28))
+            // Glass, in layers: the app's colour washed across the top, a
+            // frosted plate under it, and the black canvas showing through
+            // both. A single flat fill is what made this read as grey card
+            // stock instead of glass.
+            .background(
+                LinearGradient(colors: [accent.opacity(0.13), accent.opacity(0.02), .clear],
+                               startPoint: .top, endPoint: .bottom)
+            )
+            .background(DS.Palette.card.opacity(0.16))
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
             // The specular edge: light catches the top lip of real glass and
@@ -525,8 +535,8 @@ private struct DeckPlate<Content: View>: View {
                 RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous)
                     .strokeBorder(
                         LinearGradient(
-                            colors: [Color.white.opacity(emphasized ? 0.20 : 0.13),
-                                     Color.white.opacity(0.05),
+                            colors: [accent.opacity(emphasized ? 0.34 : 0.20),
+                                     Color.white.opacity(0.06),
                                      Color.white.opacity(0.02)],
                             startPoint: .top, endPoint: .bottom),
                         lineWidth: 1)
@@ -714,7 +724,7 @@ private struct AskCard: View {
     private var running: Bool { if case .running = item.phase { true } else { false } }
 
     var body: some View {
-        DeckPlate(emphasized: true, fills: true) {
+        DeckPlate(emphasized: true, accent: item.logo.accent, fills: true) {
             VStack(alignment: .leading, spacing: 0) {
                 SourceRow(item: item)
                     .padding(.horizontal, DK.pad)
@@ -756,7 +766,7 @@ private struct AskCard: View {
 
                     Stratum(label: item.responseLabel) {
                         VStack(alignment: .leading, spacing: 10) {
-                            if item.draft != nil, !alwaysOpen, !running { draftWell }
+                            if item.draft != nil, !running { draftWell }
                             if let facts = item.facts {
                                 Text(facts)
                                     .font(.system(size: 11.5, weight: .medium, design: .monospaced))
@@ -766,13 +776,6 @@ private struct AskCard: View {
                             if let window = item.window, !running {
                                 WindowRuler(window: window)
                             }
-                        }
-                    }
-
-                    if !item.steps.isEmpty, !running, item.phase == .asking {
-                        Spacer(minLength: 16)
-                        Stratum(label: "THEN") {
-                            StepPreview(steps: item.steps)
                         }
                     }
 
@@ -894,20 +897,29 @@ private struct AskCard: View {
             alwaysOpen = false
             engine.approve(item, always: true)
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 9) {
+                Image(systemName: "infinity")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(item.logo.accent)
                 Text(sentence)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 14.5, weight: .medium))
                     .foregroundStyle(DS.Palette.ink)
-                Text("Approves this one too. Undo any time in Judgment.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(DS.Palette.subtle)
+                Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
+            .padding(.horizontal, 13)
+            .frame(height: 46)
+            .background(
+                LinearGradient(colors: [item.logo.accent.opacity(0.16), .clear],
+                               startPoint: .top, endPoint: .bottom),
+                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
             .background(.ultraThinMaterial,
                         in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                .strokeBorder(DS.Palette.hairline, lineWidth: 1))
+                .strokeBorder(
+                    LinearGradient(colors: [item.logo.accent.opacity(0.4), Color.white.opacity(0.05)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -967,7 +979,7 @@ private struct CodeCard: View {
                 Task { try? await Task.sleep(for: .seconds(2))
                        withAnimation(.smooth(duration: 0.3)) { item.copied = false } }
             } label: {
-                DeckPlate(fills: true) {
+                DeckPlate(accent: item.logo.accent, fills: true) {
                     VStack(alignment: .leading, spacing: 0) {
                         SourceRow(item: item)
                             .padding(.horizontal, DK.pad)

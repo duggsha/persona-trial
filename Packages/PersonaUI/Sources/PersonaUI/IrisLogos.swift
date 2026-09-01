@@ -8,6 +8,24 @@ enum IrisLogo {
     case iris, mail, calendar, messages, resy, github, delta, wallet, check
 }
 
+extension IrisLogo {
+    /// The app's own colour, used to tint the card that came from it. A card
+    /// from Resy should not look identical to a card from Delta.
+    var accent: Color {
+        switch self {
+        case .mail:      Color(red: 0.11, green: 0.51, blue: 0.95)
+        case .calendar:  Color(red: 0.92, green: 0.24, blue: 0.20)
+        case .messages:  Color(red: 0.20, green: 0.78, blue: 0.35)
+        case .resy:      Color(red: 0.93, green: 0.15, blue: 0.22)
+        case .github:    Color(white: 0.82)
+        case .delta:     Color(red: 0.83, green: 0.10, blue: 0.26)
+        case .wallet:    Color(red: 0.99, green: 0.62, blue: 0.09)
+        case .check:     Color(red: 0.27, green: 0.78, blue: 0.40)
+        case .iris:      Color(white: 0.75)
+        }
+    }
+}
+
 struct IrisLogoTile: View {
     let logo: IrisLogo
     var size: CGFloat = 22
@@ -70,10 +88,10 @@ struct IrisLogoTile: View {
             case .github:
                 ZStack {
                     RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-                        .fill(Color(white: 0.1))
-                    Image(systemName: "chevron.left.forwardslash.chevron.right")
-                        .font(.system(size: size * 0.42, weight: .bold))
-                        .foregroundStyle(.white)
+                        .fill(Color.white)
+                    VectorMark(commands: BrandPath.github, viewBox: CGSize(width: 24, height: 24))
+                        .fill(Color.black)
+                        .frame(width: size * 0.76, height: size * 0.76)
                 }
                 .frame(width: size, height: size)
             case .delta:
