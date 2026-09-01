@@ -303,3 +303,153 @@ struct HoldToApprove: View {
         onApprove()
     }
 }
+
+/// What a card becomes once you approve it.
+///
+/// The steps used to appear as a rail bolted under the ask, which read as a
+/// form that had sprouted a progress bar — the decision was still sitting
+/// there, already made, taking up the screen. The card IS the work now: the
+/// question is gone, the steps own the plate, the receipt lands in the same
+/// place, and then the card leaves.
+struct WorkingFace: View {
+    let item: DeckItem
+    let engine: DecisionEngine
+
+    private var current: Int {
+        if case let .running(index) = item.phase { return index }
+        return item.steps.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                IrisLogoTile(logo: item.logo, size: 26)
+                Text(headline)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(DS.Palette.ink)
+                    .contentTransition(.opacity)
+                Spacer(minLength: 0)
+                if item.phase == .done {
+                    Button { engine.undo(item) } label: {
+                        Text("Undo")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(DS.Palette.subtle)
+                            .underline()
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, DK.pad)
+            .frame(height: 56)
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(item.steps.enumerated()), id: \.element.id) { index, step in
+                    let state = index < current ? 2 : (index == current ? 1 : 0)
+                    HStack(alignment: .top, spacing: 13) {
+                        // The rail: done behind you, live where you are, unlit
+                        // ahead. Same grammar as the trace sheet.
+                        VStack(spacing: 0) {
+                            ZStack {
+                                Circle()
+                                    .fill(state == 2 ? DS.Palette.ink : Color.primary.opacity(0.14))
+                                    .frame(width: state == 1 ? 10 : 7, height: state == 1 ? 10 : 7)
+                                if state == 1 {
+                                    Circle()
+                                        .stroke(DS.Palette.ink.opacity(0.35), lineWidth: 1)
+                                        .frame(width: 20, height: 20)
+                                }
+                            }
+                            .frame(height: 20)
+                            if index < item.steps.count - 1 {
+                                Rectangle()
+                                    .fill(index < current ? DS.Palette.ink.opacity(0.5)
+                                                          : Color.primary.opacity(0.10))
+                                    .frame(width: 1)
+                                    .frame(maxHeight: .infinity)
+                            }
+                        }
+                        .frame(width: 20)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 8) {
+                                IrisLogoTile(logo: step.logo, size: 18)
+                                Text(step.text)
+                                    .font(.system(size: 15.5, weight: state == 1 ? .medium : .regular))
+                                    .foregroundStyle(state == 0 ? DS.Palette.placeholder : DS.Palette.ink)
+                            }
+                            if let detail = step.detail, state > 0 {
+                                Text(detail)
+                                    .font(.system(size: 11.5, design: .monospaced))
+                                    .foregroundStyle(DS.Palette.placeholder)
+                            }
+                        }
+                        .padding(.bottom, index < item.steps.count - 1 ? 16 : 0)
+
+                        Spacer(minLength: 0)
+                    }
+                    .opacity(state == 0 ? 0.45 : 1)
+                }
+            }
+            .padding(.horizontal, DK.pad)
+            .animation(.smooth(duration: 0.3), value: current)
+
+            Spacer(minLength: 0)
+
+            if item.phase == .failed {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(DS.Palette.danger)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Didn't go through")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(DS.Palette.ink)
+                        if let line = item.failureLine {
+                            Text(line)
+                                .font(.system(size: 11.5, design: .monospaced))
+                                .foregroundStyle(DS.Palette.placeholder)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    Button { engine.retry(item) } label: {
+                        Text("Try again")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(DS.Palette.ink)
+                            .padding(.horizontal, 15)
+                            .frame(height: 40)
+                            .glassSurface(radius: 6, emphasis: 1.6)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, DK.pad)
+                .padding(.bottom, DK.pad)
+                .transition(.opacity)
+            } else if item.phase == .done {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.black, DS.Palette.success)
+                    Text(item.receiptLine)
+                        .font(.system(size: 15.5, weight: .medium))
+                        .foregroundStyle(DS.Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, DK.pad)
+                .padding(.bottom, DK.pad)
+                .transition(.opacity.combined(with: .offset(y: 8)))
+            }
+        }
+    }
+
+    private var headline: String {
+        switch item.phase {
+        case .failed: "Stopped"
+        case .done: "Done"
+        default: "Iris is working"
+        }
+    }
+}

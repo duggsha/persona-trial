@@ -1051,10 +1051,11 @@ private struct MessageThread: View {
                 // An invisible copy of the same string sizes the bubble; the
                 // field then fills exactly that. fixedSize cannot do this —
                 // it collapses a vertical-axis field to nothing.
-                ZStack(alignment: .leading) {
+                ZStack(alignment: .trailing) {
                     Text(draft.isEmpty ? " " : draft)
                         .opacity(0)
                         .accessibilityHidden(true)
+                        .fixedSize(horizontal: false, vertical: true)
                     if editable {
                         TextField("", text: $draft, axis: .vertical)
                             .textFieldStyle(.plain)
@@ -1330,6 +1331,25 @@ private struct AskCard: View {
 
     var body: some View {
         DeckPlate(emphasized: true, fills: true) {
+            if running || item.phase == .done || item.phase == .failed {
+                WorkingFace(item: item, engine: engine)
+                    .transition(.opacity)
+            } else {
+                askFace
+            }
+        }
+        .animation(.smooth(duration: 0.34), value: item.phase)
+        .sheet(isPresented: $traceShown) {
+            if let trace = item.trace {
+                ThinkingSheet(item: item, trace: trace)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+            }
+        }
+    }
+
+    private var askFace: some View {
+        Group {
             VStack(alignment: .leading, spacing: 0) {
                 SourceRow(item: item)
                     .padding(.horizontal, DK.pad)
@@ -1426,14 +1446,9 @@ private struct AskCard: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
 
-                Group {
-                    if running { runRail }
-                    else if item.phase == .failed { failedRow }
-                    else if item.phase == .done { doneRow }
-                    else { actionRow }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 12)
+                actionRow
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 12)
             }
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.74), value: alwaysOpen)
@@ -1446,14 +1461,6 @@ private struct AskCard: View {
                         withAnimation(.snappy(duration: 0.2)) { alwaysOpen = false }
                     }
                     .zIndex(-1)
-            }
-        }
-        .animation(.snappy(duration: 0.26), value: running)
-        .sheet(isPresented: $traceShown) {
-            if let trace = item.trace {
-                ThinkingSheet(item: item, trace: trace)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
             }
         }
     }
@@ -1651,98 +1658,6 @@ private struct AskCard: View {
         .shadow(color: .black.opacity(0.4), radius: 18, y: 8)
     }
 
-    /// It did not work. The rail stops where it stopped, the reason is plain,
-    /// and the way forward is one control — not a dead end and not a toast
-    /// that disappears before it is read.
-    private var failedRow: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 16))
-                .foregroundStyle(DS.Palette.danger)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Didn't go through")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(DS.Palette.ink)
-                if let line = item.failureLine {
-                    Text(line)
-                        .font(.system(size: 11.5, design: .monospaced))
-                        .foregroundStyle(DS.Palette.placeholder)
-                }
-            }
-            Spacer(minLength: 8)
-            Button { engine.retry(item) } label: {
-                Text("Try again")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(DS.Palette.onInk)
-                    .padding(.horizontal, 15)
-                    .frame(height: 38)
-                    .background(DS.Palette.ink,
-                                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 6)
-        .frame(minHeight: 46)
-        .transition(.opacity)
-    }
-
-    /// The result, in the card that asked for it.
-    private var doneRow: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 18))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(Color.black, DS.Palette.success)
-            Text(item.receiptLine)
-                .font(.system(size: 15.5, weight: .medium))
-                .foregroundStyle(DS.Palette.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button { engine.undo(item) } label: {
-                Text("Undo")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(DS.Palette.subtle)
-                    .underline()
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 6)
-        .frame(minHeight: 46)
-    }
-
-    private var runRail: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            ForEach(Array(item.steps.enumerated()), id: \.element.id) { index, step in
-                let state: Int = {
-                    if case let .running(current) = item.phase {
-                        return index < current ? 2 : (index == current ? 1 : 0)
-                    }
-                    return 2
-                }()
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    IrisLogoTile(logo: state == 2 ? .check : step.logo, size: 24)
-                        .saturation(state == 0 ? 0 : 1)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(step.text)
-                            .font(.system(size: 15.5, weight: .regular))
-                            .foregroundStyle(state == 0 ? DS.Palette.placeholder : DS.Palette.inkMuted)
-                        if state >= 1, let detail = step.detail {
-                            Text(detail)
-                                .font(.system(size: 11, weight: .regular, design: .monospaced))
-                                .foregroundStyle(DS.Palette.placeholder)
-                                .transition(.opacity)
-                        }
-                    }
-                    if state == 1 {
-                        ProgressView().controlSize(.mini).tint(DS.Palette.subtle)
-                    }
-                }
-                .opacity(state == 0 ? 0.45 : 1)
-            }
-        }
-        .padding(.bottom, 4)
-    }
 }
 
 // MARK: - UTILITY (the code)
@@ -1973,96 +1888,87 @@ private struct BriefAskRow: View {
                 Spacer(minLength: 0)
             }
 
-            if running {
+            if running || item.phase == .done || item.phase == .failed {
+                // Brief shows the same states the deck does, in one line.
                 HStack(spacing: 8) {
-                    ProgressView().controlSize(.mini).tint(DS.Palette.subtle)
-                    Text("Working…")
-                        .font(.system(size: 13))
-                        .foregroundStyle(DS.Palette.subtle)
+                    if item.phase == .done {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 13))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(Color.black, DS.Palette.success)
+                        Text(item.receiptLine)
+                            .font(.system(size: 13))
+                            .foregroundStyle(DS.Palette.subtle)
+                    } else if item.phase == .failed {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(DS.Palette.danger)
+                        Text("Didn't go through")
+                            .font(.system(size: 13))
+                            .foregroundStyle(DS.Palette.subtle)
+                    } else {
+                        ProgressView().controlSize(.mini).tint(DS.Palette.subtle)
+                        Text("Working…")
+                            .font(.system(size: 13))
+                            .foregroundStyle(DS.Palette.subtle)
+                    }
+                    Spacer(minLength: 0)
                 }
-            } else {
+            } else if !item.primaryLabel.isEmpty {
+                // A card with nothing to approve gets no buttons. The tracker
+                // was drawing an empty white slab because it has no primary
+                // label to put in one.
                 HStack(spacing: 8) {
                     Button { engine.decline(item) } label: {
                         Text(item.declineLabel)
                             .font(.system(size: 13.5, weight: .medium))
                             .foregroundStyle(DS.Palette.inkMuted)
-                            .frame(height: 36)
-                            .padding(.horizontal, 12)
-                            .background(Color.white.opacity(0.05),
-                                        in: RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous)
-                                .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
+                            .frame(height: 38)
+                            .padding(.horizontal, 14)
+                            .glassSurface(radius: DK.chipRadius + 1)
                     }
                     .buttonStyle(.plain)
+
                     Button { engine.approve(item, always: false) } label: {
                         Text(item.primaryLabel)
-                            .font(.system(size: 13.5, weight: .semibold))
+                            .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(DS.Palette.onInk)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 36)
-                            .background(DS.Palette.ink,
-                                        in: RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous))
+                            .frame(height: 38)
+                            .background(
+                                LinearGradient(colors: [Color.primary.opacity(0.92),
+                                                        Color.primary.opacity(0.78)],
+                                               startPoint: .top, endPoint: .bottom),
+                                in: RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous))
+                            .overlay {
+                                Grain(opacity: 0.09).clipShape(
+                                    RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous))
+                            }
                     }
                     .buttonStyle(.plain)
                 }
-            }
-        }
-        .padding(12)
-        .background(Color.white.opacity(0.035),
-                    in: RoundedRectangle(cornerRadius: DK.wellRadius + 2, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: DK.wellRadius + 2, style: .continuous)
-            .strokeBorder(DS.Palette.hairlineSoft, lineWidth: 1))
-    }
-}
-
-// MARK: - Judgment
-
-struct JudgmentSheet: View {
-    var engine: DecisionEngine = .shared
-    @State private var opened: UUID?
-    @State private var appeared = false
-
-    var body: some View {
-        SheetChrome(title: "Judgment") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("ACTS WITHOUT ASKING · \(engine.rules.count)")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .kerning(1.1)
-                    .foregroundStyle(DS.Palette.placeholder)
-                    .padding(.leading, 2)
-                    .padding(.bottom, 2)
-
-                // Each rule is its own plate. They were rows in one container
-                // divided by hairlines, which read as a settings list — but a
-                // standing permission is an object you granted, and three of
-                // them are three objects.
-                ForEach(Array(engine.rules.enumerated()), id: \.element.id) { index, rule in
-                    RuleRow(
-                        rule: rule,
-                        open: opened == rule.id,
-                        onToggle: {
-                            withAnimation(.snappy(duration: 0.26)) {
-                                opened = opened == rule.id ? nil : rule.id
-                            }
-                            _ = DSHaptics.tap(.light)
-                        },
-                        onDelete: {
-                            withAnimation(.snappy(duration: 0.28)) { engine.deleteRule(rule) }
-                        }
-                    )
-                    // Staggered in, the way the trace sheet stages its steps.
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 10)
-                    .animation(.smooth(duration: 0.34).delay(Double(index) * 0.05), value: appeared)
+            } else if let tracker = item.tracker {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(tracker.headline)
+                        .font(.system(size: 13, weight: .medium))
+                    Spacer(minLength: 0)
                 }
+                .foregroundStyle(DS.Palette.subtle)
             }
         }
-        .task { appeared = true }
+        .padding(.horizontal, 14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassSurface(radius: DK.cardRadius)
     }
 }
 
-/// One standing permission. Closed it is a sentence and nothing else; opened it
-/// shows the approvals it was learned from, so no rule is ever a black box.
+/// One standing permission, as its own plate. Closed it is a sentence; opened
+/// it is the history that taught it, and the count belongs in there with the
+/// rest of that history rather than shouting under every row.
 private struct RuleRow: View {
     let rule: DeckRule
     let open: Bool
@@ -2074,17 +1980,11 @@ private struct RuleRow: View {
             Button(action: onToggle) {
                 HStack(spacing: 13) {
                     IrisLogoTile(logo: rule.logo, size: 24)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(rule.sentence)
-                            .font(.system(size: 16, weight: .regular))
-                            .foregroundStyle(DS.Palette.ink)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("\(rule.uses) TIMES")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .kerning(0.9)
-                            .foregroundStyle(DS.Palette.placeholder)
-                    }
+                    Text(rule.sentence)
+                        .font(.system(size: 16))
+                        .foregroundStyle(DS.Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(DS.Palette.placeholder)
@@ -2098,9 +1998,9 @@ private struct RuleRow: View {
 
             if open {
                 VStack(alignment: .leading, spacing: 0) {
-                    Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
+                    Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
 
-                    Text("LEARNED FROM")
+                    Text("USED \(rule.uses) TIMES · LEARNED FROM")
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
                         .kerning(1)
                         .foregroundStyle(DS.Palette.placeholder)
@@ -2116,7 +2016,7 @@ private struct RuleRow: View {
                                     .padding(.top, 6)
                                 if index < rule.trail.count - 1 {
                                     Rectangle()
-                                        .fill(Color.white.opacity(0.09))
+                                        .fill(Color.primary.opacity(0.09))
                                         .frame(width: 1)
                                         .frame(maxHeight: .infinity)
                                 }
@@ -2140,8 +2040,7 @@ private struct RuleRow: View {
                         .foregroundStyle(DS.Palette.ink)
                         .padding(.horizontal, 14)
                         .frame(height: 36)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+                        .glassSurface(radius: 18)
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 15)
@@ -2155,19 +2054,48 @@ private struct RuleRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            LinearGradient(colors: [Color.white.opacity(0.055), Color.white.opacity(0.012), .clear],
-                           startPoint: .top, endPoint: .bottom),
-            in: RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
-        .background(.ultraThinMaterial,
-                    in: RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(colors: [Color.white.opacity(open ? 0.24 : 0.14),
-                                            Color.white.opacity(0.04)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1))
+        .glassSurface(radius: DK.cardRadius, emphasis: open ? 1.5 : 1)
         .clipShape(RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
+    }
+}
+
+// MARK: - Judgment
+
+struct JudgmentSheet: View {
+    var engine: DecisionEngine = .shared
+    @State private var opened: UUID?
+    @State private var appeared = false
+
+    var body: some View {
+        SheetChrome(title: "Judgment") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("ACTS WITHOUT ASKING · \(engine.rules.count)")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .kerning(1.1)
+                    .foregroundStyle(DS.Palette.placeholder)
+                    .padding(.leading, 2)
+                    .padding(.bottom, 2)
+
+                ForEach(Array(engine.rules.enumerated()), id: \.element.id) { index, rule in
+                    RuleRow(
+                        rule: rule,
+                        open: opened == rule.id,
+                        onToggle: {
+                            withAnimation(.snappy(duration: 0.26)) {
+                                opened = opened == rule.id ? nil : rule.id
+                            }
+                            _ = DSHaptics.tap(.light)
+                        },
+                        onDelete: {
+                            withAnimation(.snappy(duration: 0.28)) { engine.deleteRule(rule) }
+                        }
+                    )
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 10)
+                    .animation(.smooth(duration: 0.34).delay(Double(index) * 0.05), value: appeared)
+                }
+            }
+        }
+        .task { appeared = true }
     }
 }
