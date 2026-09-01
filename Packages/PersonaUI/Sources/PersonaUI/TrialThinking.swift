@@ -317,15 +317,22 @@ struct WorkingFace: View {
 
     private var current: Int {
         if case let .running(index) = item.phase { return index }
+        // Failure lands ON the last step, so that step is where the rail
+        // stops — not behind it, and certainly not ticked off.
+        if item.phase == .failed { return max(item.steps.count - 1, 0) }
         return item.steps.count
+    }
+
+    private var failedIndex: Int? {
+        item.phase == .failed ? max(item.steps.count - 1, 0) : nil
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                IrisLogoTile(logo: item.logo, size: 26)
+                IrisLogoTile(logo: item.logo, size: 24)
                 Text(headline)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 14.5, weight: .semibold))
                     .foregroundStyle(DS.Palette.ink)
                     .contentTransition(.opacity)
                 Spacer(minLength: 0)
@@ -340,75 +347,90 @@ struct WorkingFace: View {
                 }
             }
             .padding(.horizontal, DK.pad)
-            .frame(height: 56)
+            .frame(height: 54)
 
             Spacer(minLength: 0)
 
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(item.steps.enumerated()), id: \.element.id) { index, step in
-                    let state = index < current ? 2 : (index == current ? 1 : 0)
-                    HStack(alignment: .top, spacing: 13) {
-                        // The rail: done behind you, live where you are, unlit
-                        // ahead. Same grammar as the trace sheet.
-                        VStack(spacing: 0) {
+            // One continuous rail behind the rows, rather than a connector
+            // inside each row. Per-row connectors stretch to fill whatever
+            // height is going, which is how three steps ended up spread down a
+            // whole card with canyons between them.
+            VStack(alignment: .leading, spacing: 15) {
+                    ForEach(Array(item.steps.enumerated()), id: \.element.id) { index, step in
+                        let state = index < current ? 2 : (index == current ? 1 : 0)
+                        HStack(alignment: .top, spacing: 13) {
                             ZStack {
                                 Circle()
-                                    .fill(state == 2 ? DS.Palette.ink : Color.primary.opacity(0.14))
-                                    .frame(width: state == 1 ? 10 : 7, height: state == 1 ? 10 : 7)
-                                if state == 1 {
+                                    .fill(index == failedIndex ? DS.Palette.danger
+                                          : (state == 2 ? DS.Palette.ink : Color.primary.opacity(0.18)))
+                                    .frame(width: state == 1 ? 8 : 6, height: state == 1 ? 8 : 6)
+                                if state == 1, failedIndex == nil {
                                     Circle()
-                                        .stroke(DS.Palette.ink.opacity(0.35), lineWidth: 1)
-                                        .frame(width: 20, height: 20)
+                                        .stroke(DS.Palette.ink.opacity(0.4), lineWidth: 1)
+                                        .frame(width: 16, height: 16)
                                 }
                             }
-                            .frame(height: 20)
-                            if index < item.steps.count - 1 {
-                                Rectangle()
-                                    .fill(index < current ? DS.Palette.ink.opacity(0.5)
-                                                          : Color.primary.opacity(0.10))
-                                    .frame(width: 1)
-                                    .frame(maxHeight: .infinity)
-                            }
-                        }
-                        .frame(width: 20)
+                            .frame(width: 8, height: 18)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 8) {
-                                IrisLogoTile(logo: step.logo, size: 18)
+                            IrisLogoTile(logo: step.logo, size: 17)
+
+                            VStack(alignment: .leading, spacing: 1) {
                                 Text(step.text)
-                                    .font(.system(size: 15.5, weight: state == 1 ? .medium : .regular))
+                                    .font(.system(size: 14.5, weight: state == 1 ? .medium : .regular))
                                     .foregroundStyle(state == 0 ? DS.Palette.placeholder : DS.Palette.ink)
+                                if let detail = index == failedIndex ? item.failureLine : step.detail,
+                                   state > 0 {
+                                    Text(detail)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(DS.Palette.placeholder)
+                                        .lineLimit(1)
+                                }
                             }
-                            if let detail = step.detail, state > 0 {
-                                Text(detail)
-                                    .font(.system(size: 11.5, design: .monospaced))
-                                    .foregroundStyle(DS.Palette.placeholder)
-                            }
+                            Spacer(minLength: 0)
                         }
-                        .padding(.bottom, index < item.steps.count - 1 ? 16 : 0)
-
-                        Spacer(minLength: 0)
+                        .opacity(state == 0 ? 0.4 : 1)
                     }
-                    .opacity(state == 0 ? 0.45 : 1)
-                }
+
+                    if item.phase == .done {
+                        HStack(alignment: .top, spacing: 13) {
+                            Circle()
+                                .fill(DS.Palette.success)
+                                .frame(width: 6, height: 6)
+                                .frame(width: 8, height: 18)
+                            Text(item.receiptLine)
+                                .font(.system(size: 14.5, weight: .medium))
+                                .foregroundStyle(DS.Palette.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                        .transition(.opacity.combined(with: .offset(y: 6)))
+                    }
+            }
+            .background(alignment: .topLeading) {
+                Rectangle()
+                    .fill(Color.primary.opacity(0.13))
+                    .frame(width: 1)
+                    .padding(.vertical, 9)
+                    .offset(x: 3.5)
             }
             .padding(.horizontal, DK.pad)
             .animation(.smooth(duration: 0.3), value: current)
+            .animation(.smooth(duration: 0.3), value: item.phase)
 
             Spacer(minLength: 0)
 
             if item.phase == .failed {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 16))
+                        .font(.system(size: 15))
                         .foregroundStyle(DS.Palette.danger)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Didn't go through")
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.system(size: 14.5, weight: .medium))
                             .foregroundStyle(DS.Palette.ink)
                         if let line = item.failureLine {
                             Text(line)
-                                .font(.system(size: 11.5, design: .monospaced))
+                                .font(.system(size: 11, design: .monospaced))
                                 .foregroundStyle(DS.Palette.placeholder)
                         }
                     }
@@ -426,21 +448,6 @@ struct WorkingFace: View {
                 .padding(.horizontal, DK.pad)
                 .padding(.bottom, DK.pad)
                 .transition(.opacity)
-            } else if item.phase == .done {
-                HStack(spacing: 10) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.black, DS.Palette.success)
-                    Text(item.receiptLine)
-                        .font(.system(size: 15.5, weight: .medium))
-                        .foregroundStyle(DS.Palette.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, DK.pad)
-                .padding(.bottom, DK.pad)
-                .transition(.opacity.combined(with: .offset(y: 8)))
             }
         }
     }
@@ -448,8 +455,8 @@ struct WorkingFace: View {
     private var headline: String {
         switch item.phase {
         case .failed: "Stopped"
-        case .done: "Done"
-        default: "Iris is working"
+        case .done: "Finished"
+        default: "Working"
         }
     }
 }

@@ -611,7 +611,12 @@ struct DeckScreen: View {
                 // header clearance itself.
                 BriefView(engine: engine,
                           header: AnyView(greetingRow
-                              .padding(.horizontal, DS.Spacing.gutter)
+                              // The page already carries DK.gutter; this is the
+                              // 4pt that brings it up to the header's own
+                              // gutter, so "Welcome back" starts exactly where
+                              // the avatar does and the mode chip ends exactly
+                              // where the page toggle does.
+                              .padding(.horizontal, DS.Spacing.gutter - DK.gutter)
                               .padding(.top, 72)))
             }
         }
