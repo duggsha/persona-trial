@@ -222,6 +222,8 @@ final class UndoState: Identifiable {
     let message: String
     let restore: () -> Void
     let commit: () -> Void
+    /// Design parity with the shipped toast: a wider capsule past ~16 chars.
+    var toastWidth: CGFloat { message.count > 16 ? 208 : 184 }
 
     init(message: String, restore: @escaping () -> Void, commit: @escaping () -> Void) {
         self.message = message; self.restore = restore; self.commit = commit
@@ -717,6 +719,9 @@ struct DeckScreen: View {
                     // work starts immediately instead of waiting out the clock.
                     onDismiss: { engine.commitUndoNow() }
                 )
+                // The capsule sizes itself from the OUTSIDE — it fills whatever
+                // frame it is given, and without one it filled the screen.
+                .frame(width: undo.toastWidth, height: 42)
                 .padding(.bottom, 92)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
