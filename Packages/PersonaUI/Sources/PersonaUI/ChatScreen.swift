@@ -18,6 +18,7 @@ struct ChatScreen: View, Equatable {
     // rebuild. Observation still updates this view when `messages` etc. change.
     nonisolated static func == (lhs: ChatScreen, rhs: ChatScreen) -> Bool {
         lhs.messages == rhs.messages
+            && lhs.toolTrails == rhs.toolTrails
             && lhs.scrollTick == rhs.scrollTick
             && lhs.isStreaming == rhs.isStreaming
             && lhs.liveStatus == rhs.liveStatus
@@ -29,6 +30,9 @@ struct ChatScreen: View, Equatable {
     }
 
     let messages: [ChatMessage]
+    /// Tool trails, keyed by the assistant message they produced. Rendered as
+    /// a collapsed "Worked …" box directly above that reply.
+    var toolTrails: [UUID: ChatToolTrail] = [:]
     let scrollTick: Int
     /// Bumped once after the keyboard's focus transition has settled. Kept
     /// True while a history fetch is in flight. With an EMPTY transcript this
@@ -928,6 +932,11 @@ struct ChatScreen: View, Equatable {
                             )
                             .padding(.top, separator != nil ? 0 : gapAbove(index, in: rows))
                         } else {
+                            if let trail = toolTrails[message.id] {
+                                ChatWorkedBox(trail: trail)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, DS.Spacing.gutter)
+                            }
                             ChatRow(
                                 message: message,
                                 // The one bubble whose text grows token-by-token: the

@@ -19,9 +19,9 @@ import PersonaDesign
 // menu; the engine is shared, so both views are the same truth.
 
 private enum DK {
-    static let cardRadius: CGFloat = 12
-    static let wellRadius: CGFloat = 7
-    static let chipRadius: CGFloat = 5
+    static let cardRadius: CGFloat = 8
+    static let wellRadius: CGFloat = 5
+    static let chipRadius: CGFloat = 4
     static let pad: CGFloat = 18
     static let gutter: CGFloat = 16
 }
@@ -32,6 +32,7 @@ struct DeckRunStep: Identifiable, Equatable {
     let id = UUID()
     let logo: IrisLogo
     let text: String
+    var detail: String? = nil
 }
 
 @MainActor @Observable
@@ -128,9 +129,9 @@ final class DecisionEngine {
                 primaryLabel: "Send reply",
                 alwaysSentence: "Always send routine replies as you",
                 steps: [
-                    DeckRunStep(logo: .mail, text: "Opening the thread"),
-                    DeckRunStep(logo: .mail, text: "Sending as you"),
-                    DeckRunStep(logo: .check, text: "Sent"),
+                    DeckRunStep(logo: .mail, text: "Opening the thread", detail: "Re: Thursday walkthrough"),
+                    DeckRunStep(logo: .mail, text: "Sending as you", detail: "to sarah@northwind.example"),
+                    DeckRunStep(logo: .check, text: "Sent", detail: "delivered 2:41 PM"),
                 ],
                 receiptLine: "Replied to Sarah — Thursday 2 PM confirmed.",
                 createdAgo: "1h"
@@ -144,9 +145,9 @@ final class DecisionEngine {
                 primaryLabel: "Book 3:30",
                 alwaysSentence: "Always schedule when my calendar is open",
                 steps: [
-                    DeckRunStep(logo: .calendar, text: "Holding Wed 3:30"),
-                    DeckRunStep(logo: .mail, text: "Inviting Jason"),
-                    DeckRunStep(logo: .check, text: "On the calendar"),
+                    DeckRunStep(logo: .calendar, text: "Holding Wed 3:30", detail: "no conflicts · 30 min"),
+                    DeckRunStep(logo: .mail, text: "Inviting Jason", detail: "jason@northwind.example"),
+                    DeckRunStep(logo: .check, text: "On the calendar", detail: "invite accepted pending"),
                 ],
                 receiptLine: "Jason — Wednesday 3:30, invite sent.",
                 createdAgo: "3h"
@@ -159,8 +160,8 @@ final class DecisionEngine {
                 primaryLabel: "Book it",
                 alwaysSentence: "Always grab tables at places I've saved",
                 steps: [
-                    DeckRunStep(logo: .resy, text: "Taking the 7:45"),
-                    DeckRunStep(logo: .check, text: "Booked — confirmation in Mail"),
+                    DeckRunStep(logo: .resy, text: "Taking the 7:45", detail: "Marufuku · 2 seats · counter"),
+                    DeckRunStep(logo: .check, text: "Booked", detail: "conf #R-2847 · in Mail"),
                 ],
                 receiptLine: "Marufuku tonight — 7:45, two seats.",
                 createdAgo: "4h"
@@ -171,7 +172,7 @@ final class DecisionEngine {
                 context: "Moved up 40 minutes. Gate unchanged.",
                 facts: "SFO → AUS · 9:05 AM · GATE C11",
                 primaryLabel: "Update calendar",
-                steps: [DeckRunStep(logo: .calendar, text: "Calendar moved to 9:05")],
+                steps: [DeckRunStep(logo: .calendar, text: "Calendar moved to 9:05", detail: "DL 1187 · gate C11")],
                 receiptLine: "Austin flight — calendar moved to 9:05 AM.",
                 ranUnderRule: "Keep travel plans current",
                 createdAgo: "6h", phase: .done
@@ -209,7 +210,10 @@ final class DecisionEngine {
             for index in item.steps.indices {
                 withAnimation(.snappy(duration: 0.24)) { item.phase = .running(index) }
                 stepPulse += 1
-                try? await Task.sleep(for: .milliseconds(index == item.steps.indices.last ? 650 : 520))
+                // The last step lingers: the artifact line (the conf number,
+                // the delivery time) is the receipt being minted, and it
+                // deserves a beat before the card files itself.
+                try? await Task.sleep(for: .milliseconds(index == item.steps.indices.last ? 1150 : 560))
             }
             donePulse += 1
             withAnimation(.smooth(duration: 0.4)) { item.phase = .done }
@@ -230,7 +234,7 @@ final class DecisionEngine {
                 context: "She asked for the three changed slides before the review.",
                 draft: "Attached — the three slides that changed since last quarter.",
                 primaryLabel: "Send reply",
-                steps: [DeckRunStep(logo: .mail, text: "Sent as you")],
+                steps: [DeckRunStep(logo: .mail, text: "Sent as you", detail: "3 slides attached")],
                 receiptLine: "Sent Priya the three changed slides.",
                 ranUnderRule: "Always send routine replies as you",
                 createdAgo: "now", phase: .done
@@ -272,23 +276,15 @@ struct DeckScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Room for the floating header the host draws over this screen.
-            // Right under the floating header (its controls bottom out at
-            // ~113pt physical), not floating in the canvas.
-            Spacer().frame(height: 100)
-
-            Text("Welcome back, Shaurya.")
-                .font(.system(size: 31, weight: .thin))
-                .foregroundStyle(DS.Palette.ink)
-                .padding(.horizontal, DK.gutter + 4)
-                .padding(.bottom, 8)
-
-            controlRow
-                .padding(.horizontal, DK.gutter + 4)
-                .padding(.bottom, 2)
+            // The header floats; the page starts a few px under it and the
+            // greeting belongs to the PAGE — it scrolls away with the first
+            // card instead of squatting above the feed forever.
+            Spacer().frame(height: 64)
 
             switch mode {
             case .feed: pager
-            case .brief: BriefView(engine: engine)
+            case .brief:
+                BriefView(engine: engine, header: AnyView(greetingRow.padding(.horizontal, DK.gutter)))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -302,59 +298,47 @@ struct DeckScreen: View {
         .sensoryFeedback(.selection, trigger: mode)
     }
 
-    private var controlRow: some View {
-        HStack(spacing: 8) {
-            Text("NEEDS YOU · \(engine.asks.filter { $0.kind != "code" }.count)")
-                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                .kerning(1.1)
-                .foregroundStyle(DS.Palette.placeholder)
+    private var greetingRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("Welcome back, Shaurya.")
+                .font(.system(size: 30, weight: .thin))
+                .foregroundStyle(DS.Palette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 8)
+            modeSwitch
+        }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 2)
+    }
 
-            Spacer()
-
-            Menu {
-                ForEach(DeckMode.allCases, id: \.self) { candidate in
-                    Button {
-                        withAnimation(.smooth(duration: 0.3)) { mode = candidate }
-                    } label: {
-                        if candidate == mode {
-                            Label(candidate.rawValue, systemImage: "checkmark")
-                        } else {
-                            Text(candidate.rawValue)
-                        }
+    private var modeSwitch: some View {
+        Menu {
+            ForEach(DeckMode.allCases, id: \.self) { candidate in
+                Button {
+                    withAnimation(.smooth(duration: 0.3)) { mode = candidate }
+                } label: {
+                    if candidate == mode {
+                        Label(candidate.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(candidate.rawValue)
                     }
                 }
-            } label: {
-                HStack(spacing: 5) {
-                    Text(mode == .feed ? "FEED" : "BRIEF")
-                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                        .kerning(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                }
-                .foregroundStyle(DS.Palette.inkMuted)
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .contentShape(Capsule())
             }
-            .smallGlassCapsule()
-
-            Button {
-                engine.judgmentShown = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "brain")
-                        .font(.system(size: 10, weight: .semibold))
-                    Text("\(engine.rules.count)")
-                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                }
-                .foregroundStyle(DS.Palette.inkMuted)
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .contentShape(Capsule())
+        } label: {
+            HStack(spacing: 5) {
+                Text(mode == .feed ? "FEED" : "BRIEF")
+                    .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                    .kerning(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
             }
-            .buttonStyle(.plain)
-            .smallGlassCapsule()
+            .foregroundStyle(DS.Palette.inkMuted)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .contentShape(Capsule())
         }
+        .smallGlassCapsule()
     }
 
     // MARK: The pager
@@ -373,11 +357,17 @@ struct DeckScreen: View {
             // the spare height goes below it, so the next card's head reads
             // and the previous card keeps a sliver above.
             let spare = height - slot
-            let topMargin: CGFloat = 14
-            let bottomMargin = spare - topMargin
+            let topMargin: CGFloat = 6
+            let bottomMargin = max(12, spare - topMargin - 66)
 
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 10) {
+                    greetingRow
+                        .id("greet")
+                        .scrollTransition(axis: .vertical) { content, phase in
+                            content.opacity(phase.isIdentity ? 1 : 0)
+                        }
+
                     ForEach(engine.asks) { item in
                         Group {
                             if item.kind == "code" {
@@ -651,12 +641,20 @@ private struct AskCard: View {
                     }
                     return 2
                 }()
-                HStack(spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
                     IrisLogoTile(logo: state == 2 ? .check : step.logo, size: 24)
                         .saturation(state == 0 ? 0 : 1)
-                    Text(step.text)
-                        .font(.system(size: 15, weight: state == 1 ? .semibold : .regular))
-                        .foregroundStyle(state == 0 ? DS.Palette.placeholder : DS.Palette.inkMuted)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(step.text)
+                            .font(.system(size: 15, weight: state == 1 ? .semibold : .regular))
+                            .foregroundStyle(state == 0 ? DS.Palette.placeholder : DS.Palette.inkMuted)
+                        if state >= 1, let detail = step.detail {
+                            Text(detail)
+                                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                .foregroundStyle(DS.Palette.placeholder)
+                                .transition(.opacity)
+                        }
+                    }
                     if state == 1 {
                         ProgressView().controlSize(.mini).tint(DS.Palette.subtle)
                     }
@@ -820,10 +818,12 @@ private struct ReceiptRow: View {
 
 private struct BriefView: View {
     let engine: DecisionEngine
+    var header: AnyView? = nil
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
+                if let header { header }
                 if let code = engine.asks.first(where: { $0.kind == "code" }) {
                     CodeCard(item: code)
                         .frame(height: 210)
@@ -1025,6 +1025,6 @@ struct JudgmentSheet: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
         }
-        .presentationBackground(DS.Palette.canvas)
+        .presentationBackground(.thinMaterial)
     }
 }

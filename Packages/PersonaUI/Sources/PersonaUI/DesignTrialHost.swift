@@ -31,6 +31,10 @@ public struct DesignTrialHost: View {
     /// The menu button's slide-over.
     @State private var sidebarOpen = false
     @State private var settingsShown = false
+    /// The transcript, live: voice mode appends to it.
+    @State private var chatLog: [ChatMessage] = []
+    @State private var chatTrails: [UUID: ChatToolTrail] = [:]
+    @State private var voiceShown = false
     /// Live horizontal drag distance while a page swipe is in flight.
     @State private var dragX: CGFloat = 0
     /// Latched once a drag is decisively horizontal: the pages' vertical
@@ -77,6 +81,12 @@ public struct DesignTrialHost: View {
 
                 // The menu button's actual destination. Above everything —
                 // header included — because it IS the navigation.
+                if voiceShown {
+                    VoiceOverlay { completeVoiceFlow() }
+                        .transition(.opacity)
+                        .zIndex(30)
+                }
+
                 TrialSidebar(
                     isOpen: $sidebarOpen,
                     page: page,
@@ -125,7 +135,8 @@ public struct DesignTrialHost: View {
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
             ChatScreen(
-                messages: messages,
+                messages: chatLog.isEmpty ? messages : chatLog,
+                toolTrails: chatTrails,
                 scrollTick: chatScrollTick,
                 onDismissKeyboard: { composerFocused = false }
             )
@@ -183,6 +194,43 @@ public struct DesignTrialHost: View {
             }
     }
 
+    /// The voice ask, made real: the engine books the table (the feed's
+    /// Marufuku card runs and files itself), and the transcript records the
+    /// turn, the tool trail, and the reply.
+    private func completeVoiceFlow() {
+        voiceShown = false
+        if chatLog.isEmpty { chatLog = messages }
+        let now = Date()
+        let clock = now.formatted(.dateTime.hour().minute())
+        chatLog.append(ChatMessage(
+            text: "book the table too", isUser: true, time: clock, date: now,
+            deliveredAt: now, readAt: now))
+
+        let engine = DecisionEngine.shared
+        if let table = engine.items.first(where: { $0.kind == "place" && $0.phase == .asking }) {
+            engine.approve(table, always: false)
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1900))
+            let reply = ChatMessage(
+                text: "Booked — Marufuku at 7:45, two counter seats. The receipt is under Handled.",
+                isUser: false,
+                time: Date().formatted(.dateTime.hour().minute()),
+                date: Date())
+            chatLog.append(reply)
+            chatTrails[reply.id] = ChatToolTrail(
+                summary: "Worked 4s · 3 steps",
+                steps: [
+                    .init(logo: .resy, label: "Opened Resy", detail: "Marufuku · tonight"),
+                    .init(logo: .resy, label: "Took the 7:45", detail: "2 seats · counter"),
+                    .init(logo: .check, label: "Booked", detail: "conf #R-2847"),
+                ])
+            chatScrollTick += 1
+            showChat()
+        }
+    }
+
     /// A Home affordance that wants the conversation — the chat starters, a
     /// card's "ask" — pages over instead of seeding a turn, since nothing can
     /// be sent here.
@@ -202,7 +250,13 @@ public struct DesignTrialHost: View {
                 // clears its own draft so the gesture reads as complete.
                 onSend: { draft = "" },
                 // Dead on purpose: a released memo is dropped, not uploaded.
-                onVoiceMessage: { url, _ in try? FileManager.default.removeItem(at: url) },
+                onVoiceMessage: { url, _ in
+                    try? FileManager.default.removeItem(at: url)
+                    // Voice mode: the release IS the ask. The overlay hears,
+                    // the engine does the work for real, the transcript gets
+                    // the turn, the trail, and the answer.
+                    voiceShown = true
+                },
                 onCamera: {},
                 onPhotoLibrary: {},
                 onAttachFile: {},
