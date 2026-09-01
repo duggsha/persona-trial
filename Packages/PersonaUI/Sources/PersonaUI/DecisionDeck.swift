@@ -749,7 +749,7 @@ struct DeckScreen: View {
                 // The capsule sizes itself from the OUTSIDE — it fills whatever
                 // frame it is given, and without one it filled the screen.
                 .frame(width: undo.toastWidth, height: 42)
-                .padding(.bottom, 92)
+                .padding(.bottom, 108)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }

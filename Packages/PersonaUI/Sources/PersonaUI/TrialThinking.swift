@@ -347,8 +347,6 @@ struct WorkingFace: View {
             .padding(.horizontal, DK.pad)
             .frame(height: 54)
 
-            Spacer(minLength: 0)
-
             // One continuous rail behind the rows, rather than a connector
             // inside each row. Per-row connectors stretch to fill whatever
             // height is going, which is how three steps ended up spread down a
