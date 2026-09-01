@@ -139,3 +139,98 @@ struct ThinkingSheet: View {
         .offset(y: revealed >= index ? 0 : 6)
     }
 }
+
+/// The high-stakes control. A tap is the right amount of effort for something
+/// private and reversible; sending a message as you, or spending your money,
+/// should cost a deliberate movement. The track fills as you go, the haptic
+/// lands at the commit point, and letting go early springs back — the gesture
+/// is interruptible right up until it isn't.
+struct SlideToApprove: View {
+    let label: String
+    let onApprove: () -> Void
+
+    @State private var offset: CGFloat = 0
+    @State private var armed = false
+    @State private var done = false
+
+    private let knob: CGFloat = 46
+
+    var body: some View {
+        GeometryReader { geo in
+            let travel = max(geo.size.width - knob - 8, 1)
+            let progress = min(max(offset / travel, 0), 1)
+
+            ZStack(alignment: .leading) {
+                // The track fills behind the knob, so progress is legible
+                // without reading anything.
+                RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    // The trail behind the knob is a wash, not a second solid
+                    // block — a hard fill made the knob read as a boxed button.
+                    .overlay(alignment: .leading) {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.06 + 0.16 * progress))
+                            .frame(width: knob + 8 + travel * progress)
+                    }
+                    .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+
+                HStack(spacing: 7) {
+                    Text(done ? "Sending" : label)
+                        .font(.system(size: 15.5, weight: .medium))
+                        .foregroundStyle(DS.Palette.ink)
+                    if !done {
+                        Image(systemName: "chevron.compact.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(DS.Palette.placeholder)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.leading, knob * 0.5)
+                .opacity(1 - progress * 1.4)
+
+                RoundedRectangle(cornerRadius: DK.wellRadius - 1, style: .continuous)
+                    .fill(DS.Palette.ink)
+                    .frame(width: knob, height: knob)
+                    .overlay(
+                        Image(systemName: done ? "checkmark" : "arrow.right")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(DS.Palette.onInk)
+                    )
+                    .offset(x: 4 + offset)
+                    .highPriorityGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                guard !done else { return }
+                                DecisionEngine.shared.slideActive = true
+                                offset = min(max(value.translation.width, 0), travel)
+                                // One haptic, at the point of no return.
+                                let past = offset / travel > 0.92
+                                if past != armed {
+                                    armed = past
+                                    if past { _ = DSHaptics.tap(.rigid) }
+                                }
+                            }
+                            .onEnded { _ in
+                                DecisionEngine.shared.slideActive = false
+                                guard !done else { return }
+                                if offset / travel > 0.92 {
+                                    done = true
+                                    withAnimation(.snappy(duration: 0.18)) { offset = travel }
+                                    onApprove()
+                                } else {
+                                    // Let go early and it springs back. Nothing
+                                    // happens, and nothing needs undoing.
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.7)) {
+                                        offset = 0
+                                    }
+                                    armed = false
+                                }
+                            }
+                    )
+            }
+        }
+        .frame(height: 54)
+    }
+}

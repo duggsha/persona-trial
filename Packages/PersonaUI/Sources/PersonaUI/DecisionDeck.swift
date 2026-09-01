@@ -18,7 +18,7 @@ import PersonaDesign
 // composed page, closer to a morning briefing). The switcher is a native
 // menu; the engine is shared, so both views are the same truth.
 
-private enum DK {
+enum DK {
     static let cardRadius: CGFloat = 8
     static let wellRadius: CGFloat = 5
     static let chipRadius: CGFloat = 4
@@ -37,7 +37,7 @@ struct DeckRunStep: Identifiable, Equatable {
 
 @MainActor @Observable
 final class DeckItem: Identifiable {
-    enum Phase: Equatable { case asking, running(Int), done, dismissed }
+    enum Phase: Equatable { case asking, running(Int), done, failed, dismissed }
 
     let id = UUID()
     let kind: String
@@ -62,9 +62,18 @@ final class DeckItem: Identifiable {
     let triggerLabel: String
     let responseLabel: String
     let replyStyle: ReplyStyle
+    let stakes: Stakes
+    /// What is actually at risk, said plainly, above a high-stakes control.
+    let consequence: String?
+    /// Seeded so one card can fail on purpose. Failure is a state this product
+    /// has to have an answer for, not an edge case to leave out of the demo.
+    let failsOnce: Bool
+    let failureLine: String?
     let trace: ThinkingTrace?
     /// Set once the receipt has been read and the card has left the deck.
     var filed = false
+    /// Cleared by a retry so the seeded failure only happens once.
+    var failed = true
     /// The window this card is about, drawn as a ruler rather than described.
     let window: DeckWindow?
     /// How this got here: the signals that produced the card, in order.
@@ -79,7 +88,9 @@ final class DeckItem: Identifiable {
     init(kind: String, source: String, logo: IrisLogo, avatarAsset: String? = nil,
          ask: String, context: String, facts: String? = nil,
          incoming: String? = nil, triggerLabel: String = "", responseLabel: String = "",
-         replyStyle: ReplyStyle = .plain, trace: ThinkingTrace? = nil,
+         replyStyle: ReplyStyle = .plain, stakes: Stakes = .low,
+         consequence: String? = nil, failsOnce: Bool = false, failureLine: String? = nil,
+         trace: ThinkingTrace? = nil,
          window: DeckWindow? = nil,
          draft: String? = nil, primaryLabel: String = "", declineLabel: String = "Not this",
          alwaysSentence: String? = nil, steps: [DeckRunStep] = [], receiptLine: String = "",
@@ -94,7 +105,10 @@ final class DeckItem: Identifiable {
         self.receiptLine = receiptLine; self.ranUnderRule = ranUnderRule
         self.incoming = incoming
         self.triggerLabel = triggerLabel; self.responseLabel = responseLabel
-        self.replyStyle = replyStyle; self.trace = trace
+        self.replyStyle = replyStyle; self.stakes = stakes
+        self.consequence = consequence
+        self.failsOnce = failsOnce; self.failureLine = failureLine
+        self.trace = trace
         self.window = window
         self.trail = trail; self.createdAgo = createdAgo; self.code = code; self.codeDeadline = codeDeadline
         self.phase = phase; self.filed = filed
@@ -106,6 +120,13 @@ final class DeckItem: Identifiable {
 /// should look like an iMessage; the point of approving is recognising the
 /// thing you are approving.
 enum ReplyStyle { case plain, mail, imessage }
+
+/// How much the ask should cost you. Moving your own calendar and spending
+/// your money must not be approved by the same gesture: a tap is right for
+/// something reversible and private, and wrong for something that reaches a
+/// real person or a real card. High stakes asks for a deliberate slide, and
+/// the slide is the only way through.
+enum Stakes { case low, high }
 
 /// Everything Iris did before it asked. Kept OFF the card and behind one
 /// control: a card is a decision, and the working out belongs where you can go
@@ -165,6 +186,9 @@ final class DecisionEngine {
     /// Which card the deck is resting on. The composer reads it so one input
     /// can edit whatever you are looking at.
     var focusedID: UUID?
+    /// True while a slide-to-approve is under the finger. The pager reads it
+    /// and stands down: one horizontal drag cannot mean two things.
+    var slideActive = false
     private var graduated = false
 
     // Haptic pulses. Views subscribe with .sensoryFeedback on these counters;
@@ -172,11 +196,15 @@ final class DecisionEngine {
     var stepPulse = 0
     var donePulse = 0
     var declinePulse = 0
+    var failPulse = 0
 
     /// A card that just finished stays in the deck until its receipt has had
     /// a beat on screen. Filing it instantly meant the result of approving was
     /// something you only ever saw somewhere else.
-    var asks: [DeckItem] { items.filter { $0.phase == .asking || isRunning($0) || ($0.phase == .done && !$0.filed) } }
+    var asks: [DeckItem] {
+        items.filter { $0.phase == .asking || $0.phase == .failed || isRunning($0)
+            || ($0.phase == .done && !$0.filed) }
+    }
     var handled: [DeckItem] { items.filter { $0.phase == .done && $0.filed } }
     private func isRunning(_ item: DeckItem) -> Bool {
         if case .running = item.phase { true } else { false }
@@ -186,20 +214,14 @@ final class DecisionEngine {
         guard items.isEmpty else { return }
         items = [
             DeckItem(
-                kind: "code", source: "GITHUB", logo: .github,
-                ask: "", context: "Tap to copy",
-                trail: ["GITHUB SIGN-IN 1m", "SAME DEVICE AS ALWAYS"],
-                createdAgo: "1m", code: "481 902",
-                codeDeadline: Date().addingTimeInterval(9 * 60)
-            ),
-            DeckItem(
                 kind: "send_draft", source: "SARAH WHITFIELD · MAIL", logo: .mail,
                 avatarAsset: "AvatarSarah",
                 ask: "Confirm Thursday with Sarah?",
                 context: "",
                 incoming: "Does Thursday still work for the walkthrough? I have to book the room today.",
                 triggerLabel: "SARAH ASKED", responseLabel: "IRIS WROTE",
-                replyStyle: .mail,
+                replyStyle: .mail, stakes: .high,
+                consequence: "Sends from your address, as you.",
                 trace: ThinkingTrace(
                     looked: ["sarah whitfield · recent thread",
                              "your calendar · thursday",
@@ -258,7 +280,8 @@ final class DecisionEngine {
                 context: "",
                 incoming: "we still on for saturday? need to give them a headcount tonight",
                 triggerLabel: "MAYA TEXTED", responseLabel: "IRIS WROTE",
-                replyStyle: .imessage,
+                replyStyle: .imessage, stakes: .high,
+                consequence: "Sends from your number, as you.",
                 trace: ThinkingTrace(
                     looked: ["maya chen · messages",
                              "your saturday",
@@ -282,11 +305,15 @@ final class DecisionEngine {
             ),
             DeckItem(
                 kind: "place", source: "RESY", logo: .resy,
-                ask: "Take the 7:45 at Marufuku?",
+                ask: "Hold the 7:45 at Marufuku?",
                 context: "",
-                facts: "TONIGHT · 7:45 · 2 SEATS · FREE CANCEL TO 6",
+                facts: "TONIGHT · 7:45 PM · 2 SEATS · $40 DEPOSIT",
                 incoming: "book dinner tonight if marufuku has anything",
                 triggerLabel: "YOU ASKED", responseLabel: "IRIS FOUND",
+                stakes: .high,
+                consequence: "Charges $40 to your Visa ending 4412.",
+                failsOnce: true,
+                failureLine: "resy declined the hold · card not on file",
                 trace: ThinkingTrace(
                     looked: ["resy · marufuku tonight",
                              "your saved places",
@@ -302,9 +329,10 @@ final class DecisionEngine {
                 alwaysSentence: "Always book Marufuku when I ask",
                 steps: [
                     DeckRunStep(logo: .resy, text: "Taking the 7:45", detail: "Marufuku · 2 seats · counter"),
+                    DeckRunStep(logo: .wallet, text: "Authorising $40", detail: "Visa · 4412"),
                     DeckRunStep(logo: .check, text: "Booked", detail: "conf #R-2847 · in Mail"),
                 ],
-                receiptLine: "Marufuku tonight, 7:45, two seats.",
+                receiptLine: "Marufuku tonight, 7:45. $40 held.",
                 trail: ["SAVED BY YOU MAR 2", "YOU ASKED IN CHAT 4h", "LAST TABLE UNDER 8PM"],
                 createdAgo: "4h"
             ),
@@ -323,6 +351,13 @@ final class DecisionEngine {
                 trail: ["DELTA PUSH 6h", "MATCHED YOUR CALENDAR", "RAN UNDER A RULE"],
                 createdAgo: "6h", phase: .done, filed: true
             ),
+            DeckItem(
+                kind: "code", source: "GITHUB", logo: .github,
+                ask: "", context: "Tap to copy",
+                trail: ["GITHUB SIGN-IN 1m", "SAME DEVICE AS ALWAYS"],
+                createdAgo: "1m", code: "481 902",
+                codeDeadline: Date().addingTimeInterval(9 * 60)
+            ),
         ]
     }
 
@@ -334,6 +369,12 @@ final class DecisionEngine {
         }
         run(item)
         if always, item.kind == "send_draft" { graduate() }
+    }
+
+    /// Retry clears the seeded failure, so the second attempt actually lands.
+    func retry(_ item: DeckItem) {
+        item.failed = false
+        run(item)
     }
 
     func decline(_ item: DeckItem) {
@@ -357,6 +398,14 @@ final class DecisionEngine {
             for index in item.steps.indices {
                 withAnimation(.snappy(duration: 0.24)) { item.phase = .running(index) }
                 stepPulse += 1
+                // The seeded failure lands on the last step, where a real one
+                // usually does: everything worked until the thing that mattered.
+                if item.failsOnce, item.failed, index == item.steps.count - 1 {
+                    try? await Task.sleep(for: .milliseconds(700))
+                    failPulse += 1
+                    withAnimation(.smooth(duration: 0.32)) { item.phase = .failed }
+                    return
+                }
                 // The last step lingers: the artifact line (the conf number,
                 // the delivery time) is the receipt being minted, and it
                 // deserves a beat before the card files itself.
@@ -449,7 +498,10 @@ struct DeckScreen: View {
                 ZStack(alignment: .top) {
                     pager
                     greetingRow
-                        .padding(.horizontal, DK.gutter)
+                        // The header's gutter, so "Welcome back" starts exactly
+                        // where the avatar does and the mode chip ends exactly
+                        // where the page toggle does.
+                        .padding(.horizontal, DS.Spacing.gutter)
                         .padding(.top, 72)
                         .opacity(atFirstCard ? 1 : 0)
                         .animation(.smooth(duration: 0.22), value: atFirstCard)
@@ -460,7 +512,7 @@ struct DeckScreen: View {
                 // header clearance itself.
                 BriefView(engine: engine,
                           header: AnyView(greetingRow
-                              .padding(.horizontal, DK.gutter)
+                              .padding(.horizontal, DS.Spacing.gutter)
                               .padding(.top, 72)))
             }
         }
@@ -489,7 +541,6 @@ struct DeckScreen: View {
             Spacer(minLength: 8)
             modeSwitch
         }
-        .padding(.horizontal, 4)
         .padding(.bottom, 2)
     }
 
@@ -955,6 +1006,7 @@ private struct AskCard: View {
 
                 Group {
                     if running { runRail }
+                    else if item.phase == .failed { failedRow }
                     else if item.phase == .done { doneRow }
                     else { actionRow }
                 }
@@ -989,6 +1041,54 @@ private struct AskCard: View {
     }
 
     private var actionRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if item.stakes == .high {
+                highStakesRow
+            } else {
+                lowStakesRow
+            }
+        }
+    }
+
+    /// Something that reaches a person or a card. The consequence is named,
+    /// and the only way through is a deliberate gesture — you cannot send this
+    /// by brushing the screen in your pocket.
+    private var highStakesRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let consequence = item.consequence {
+                HStack(spacing: 7) {
+                    Image(systemName: "exclamationmark.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(consequence)
+                        .font(.system(size: 12.5, weight: .medium))
+                }
+                .foregroundStyle(DS.Palette.subtle)
+                .padding(.horizontal, 6)
+            }
+
+            HStack(spacing: 8) {
+                Button { engine.decline(item) } label: {
+                    Text(item.declineLabel)
+                        .font(.system(size: 15.5, weight: .regular))
+                        .foregroundStyle(DS.Palette.inkMuted)
+                        .frame(height: 54)
+                        .padding(.horizontal, 16)
+                        .background(.ultraThinMaterial,
+                                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
+                SlideToApprove(label: item.primaryLabel) {
+                    alwaysOpen = false
+                    engine.approve(item, always: false)
+                }
+            }
+        }
+    }
+
+    private var lowStakesRow: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 Button { engine.decline(item) } label: {
@@ -1004,6 +1104,7 @@ private struct AskCard: View {
 
                 HStack(spacing: 1) {
                     Button {
+                        guard item.stakes == .low else { return }
                         alwaysOpen = false
                         engine.approve(item, always: false)
                     } label: {
@@ -1069,6 +1170,41 @@ private struct AskCard: View {
                     lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+
+    /// It did not work. The rail stops where it stopped, the reason is plain,
+    /// and the way forward is one control — not a dead end and not a toast
+    /// that disappears before it is read.
+    private var failedRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(DS.Palette.danger)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Didn't go through")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(DS.Palette.ink)
+                if let line = item.failureLine {
+                    Text(line)
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(DS.Palette.placeholder)
+                }
+            }
+            Spacer(minLength: 8)
+            Button { engine.retry(item) } label: {
+                Text("Try again")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(DS.Palette.onInk)
+                    .padding(.horizontal, 15)
+                    .frame(height: 38)
+                    .background(DS.Palette.ink,
+                                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 6)
+        .frame(minHeight: 46)
+        .transition(.opacity)
     }
 
     /// The result, in the card that asked for it.

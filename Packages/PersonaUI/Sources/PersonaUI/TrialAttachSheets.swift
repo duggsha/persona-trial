@@ -20,11 +20,11 @@ struct ConnectedAppsSheet: View {
     @State private var apps: [App] = [
         App(logo: .mail, name: "Mail", scope: "Read · draft · send as you", on: true),
         App(logo: .calendar, name: "Calendar", scope: "Read · hold · invite", on: true),
-        App(logo: .resy, name: "Resy", scope: "Search · book · cancel", on: true),
+        App(logo: .resy, name: "Resy", scope: "Search · book · cancel", on: false),
         App(logo: .github, name: "GitHub", scope: "Read codes only", on: true),
         App(logo: .delta, name: "Delta", scope: "Read flight status", on: true),
-        App(logo: .messages, name: "Messages", scope: "Not connected", on: false),
-        App(logo: .wallet, name: "Wallet", scope: "Not connected", on: false)
+        App(logo: .messages, name: "Messages", scope: "Read · reply as you", on: true),
+        App(logo: .wallet, name: "Wallet", scope: "Authorise holds", on: true)
     ]
 
     private var liveCount: Int { apps.filter(\.on).count }

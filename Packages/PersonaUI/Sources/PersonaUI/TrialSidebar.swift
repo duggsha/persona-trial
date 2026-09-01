@@ -126,6 +126,7 @@ struct ProfileSheet: View {
     let onJudgment: () -> Void
     @Environment(\.dismiss) private var dismiss
 
+    @AppStorage("trial.appearance") private var appearance = "system"
     @State private var notifications = true
     @State private var voice = "Iris"
     @State private var speaks = true
@@ -176,6 +177,28 @@ struct ProfileSheet: View {
                 SheetRow(symbol: "text.bubble", label: "Chat", action: { dismiss(); onChat() }) { SheetChevron() }
                 SheetDivider()
                 SheetRow(symbol: "brain", label: "Judgment", action: { dismiss(); onJudgment() }) { SheetChevron() }
+            }
+
+            SheetSection(title: "Appearance") {
+                HStack(spacing: 13) {
+                    Image(systemName: "circle.lefthalf.filled")
+                        .font(.system(size: 17))
+                        .foregroundStyle(DS.Palette.inkMuted)
+                        .frame(width: 26)
+                    Text("Theme")
+                        .font(.system(size: 16.5, weight: .regular))
+                        .foregroundStyle(DS.Palette.ink)
+                    Spacer(minLength: 8)
+                    Picker("", selection: $appearance) {
+                        Text("Auto").tag("system")
+                        Text("Light").tag("light")
+                        Text("Dark").tag("dark")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 190)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 58)
             }
 
             SheetSection(title: "Voice") {

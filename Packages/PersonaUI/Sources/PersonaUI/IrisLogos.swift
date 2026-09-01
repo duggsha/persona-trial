@@ -34,10 +34,15 @@ struct IrisLogoTile: View {
         Group {
             switch logo {
             case .iris:
-                Circle()
-                    .fill(LinearGradient(colors: [Color(red: 0.75, green: 0.62, blue: 1.0),
-                                                  Color(red: 0.98, green: 0.62, blue: 0.45)],
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                // The same mark the header draws. A second, invented Iris logo
+                // in the lists made the product look like two products.
+                PersonaAsset.image("PersonaMark")
+                    .renderingMode(.template)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .padding(size * 0.16)
+                    .foregroundStyle(DS.Palette.ink)
                     .frame(width: size, height: size)
             case .mail:
                 ZStack {

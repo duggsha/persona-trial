@@ -40,6 +40,15 @@ public struct DesignTrialHost: View {
     @State private var filesShown = false
     @State private var cameraShown = false
     @State private var notificationsShown = false
+    /// Light / dark / follow the system, chosen in Profile and remembered.
+    @AppStorage("trial.appearance") private var appearance = "system"
+    private var scheme: ColorScheme? {
+        switch appearance {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
+    }
     /// Live horizontal drag distance while a page swipe is in flight.
     @State private var dragX: CGFloat = 0
     /// Latched once a drag is decisively horizontal: the pages' vertical
@@ -62,9 +71,10 @@ public struct DesignTrialHost: View {
     public var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .top) {
-                // Black, not near-black: the glass has nothing to lift off
-                // a grey ground.
-                Color.black.ignoresSafeArea()
+                // The ground the glass lifts off: true black in dark, the
+                // canvas token in light.
+                (scheme == .light ? DS.Palette.canvas : Color.black)
+                    .ignoresSafeArea()
 
                 pager(width: geo.size.width, safeHeight: geo.size.height)
 
@@ -204,6 +214,9 @@ public struct DesignTrialHost: View {
     private func pageDrag(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12)
             .onChanged { value in
+                // A slide-to-approve owns the horizontal axis while it is under
+                // the finger.
+                guard !DecisionEngine.shared.slideActive else { return }
                 // Latch the axis once: a drag that started vertical belongs to
                 // the page's own scroller and must never move the pager.
                 if !pagingHorizontally {
