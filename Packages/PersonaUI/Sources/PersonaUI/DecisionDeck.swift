@@ -51,6 +51,10 @@ final class DeckItem: Identifiable {
     let primaryLabel: String
     let declineLabel: String
     let alwaysSentence: String?
+    /// The widths this permission could have. Always-for-this-person and
+    /// always-for-everyone are very different grants, and the control was only
+    /// ever offering one of them.
+    let alwaysScopes: [String]
     let steps: [DeckRunStep]
     let receiptLine: String
     var ranUnderRule: String?
@@ -97,7 +101,8 @@ final class DeckItem: Identifiable {
          trace: ThinkingTrace? = nil, tracker: DeckTracker? = nil, ticket: DeckTicket? = nil,
          window: DeckWindow? = nil,
          draft: String? = nil, primaryLabel: String = "", declineLabel: String = "Not this",
-         alwaysSentence: String? = nil, steps: [DeckRunStep] = [], receiptLine: String = "",
+         alwaysSentence: String? = nil, alwaysScopes: [String] = [],
+         steps: [DeckRunStep] = [], receiptLine: String = "",
          ranUnderRule: String? = nil,
          trail: [String] = [], createdAgo: String, code: String? = nil,
          codeDeadline: Date? = nil, phase: Phase = .asking, filed: Bool = false) {
@@ -105,7 +110,8 @@ final class DeckItem: Identifiable {
         self.avatarAsset = avatarAsset; self.ask = ask; self.context = context
         self.facts = facts; self.draft = draft
         self.primaryLabel = primaryLabel; self.declineLabel = declineLabel
-        self.alwaysSentence = alwaysSentence; self.steps = steps
+        self.alwaysSentence = alwaysSentence; self.alwaysScopes = alwaysScopes
+        self.steps = steps
         self.receiptLine = receiptLine; self.ranUnderRule = ranUnderRule
         self.incoming = incoming
         self.triggerLabel = triggerLabel; self.responseLabel = responseLabel
@@ -271,6 +277,9 @@ final class DecisionEngine {
                 primaryLabel: "Send it",
                 declineLabel: "Don't send",
                 alwaysSentence: "Always send plan replies to Maya",
+                alwaysScopes: ["Always reply to Maya about plans",
+                               "Always reply to Maya",
+                               "Always reply to close friends"],
                 steps: [
                     DeckRunStep(logo: .messages, text: "Sending as you", detail: "to Maya Chen"),
                     DeckRunStep(logo: .check, text: "Delivered", detail: "read 9:58 PM"),
@@ -318,6 +327,9 @@ final class DecisionEngine {
                 primaryLabel: "Send reply",
                 declineLabel: "Don't send",
                 alwaysSentence: "Always send scheduling replies to Sarah",
+                alwaysScopes: ["Always reply to Sarah about scheduling",
+                               "Always reply to Sarah",
+                               "Always reply to my team"],
                 steps: [
                     DeckRunStep(logo: .mail, text: "Opening the thread", detail: "Re: Thursday walkthrough"),
                     DeckRunStep(logo: .mail, text: "Sending as you", detail: "to sarah@northwind.example"),
@@ -353,6 +365,9 @@ final class DecisionEngine {
                 primaryLabel: "Book 3:30",
                 declineLabel: "Don't book",
                 alwaysSentence: "Always book time with anyone when I'm free",
+                alwaysScopes: ["Always book time with Jason",
+                               "Always book 30 minutes with anyone",
+                               "Always book any time I'm free"],
                 steps: [
                     DeckRunStep(logo: .calendar, text: "Holding Wed 3:30", detail: "no conflicts · 30 min"),
                     DeckRunStep(logo: .mail, text: "Inviting Jason", detail: "jason@northwind.example"),
@@ -385,12 +400,15 @@ final class DecisionEngine {
                     ruledOut: ["9:15 PM. Later than you have ever booked",
                                "Sushi Kashiba. You have not saved it",
                                "Booking silently. It charges a deposit"]),
-                ticket: DeckTicket(eyebrow: "TONIGHT · MARUFUKU",
+                ticket: DeckTicket(eyebrow: "TONIGHT",
                                    headline: "7:45 PM",
                                    lines: ["2 seats", "counter", "$40 hold"]),
                 primaryLabel: "Book it",
                 declineLabel: "Don't book",
                 alwaysSentence: "Always book tables at Marufuku",
+                alwaysScopes: ["Always book tables at Marufuku",
+                               "Always book tables under $50",
+                               "Always book tables at places I've saved"],
                 steps: [
                     DeckRunStep(logo: .resy, text: "Taking the 7:45", detail: "Marufuku · 2 seats · counter"),
                     DeckRunStep(logo: .wallet, text: "Authorising $40", detail: "Visa · 4412"),
@@ -410,6 +428,8 @@ final class DecisionEngine {
                 primaryLabel: "Update calendar",
                 declineLabel: "Leave it",
                 alwaysSentence: "Always move my calendar for any airline",
+                alwaysScopes: ["Always move my calendar for Delta",
+                               "Always move my calendar for any airline"],
                 steps: [DeckRunStep(logo: .calendar, text: "Calendar moved to 9:05", detail: "DL 1187 · gate C11")],
                 receiptLine: "Austin flight moved to 9:05 AM.",
                 ranUnderRule: "Keep travel plans current",
@@ -426,10 +446,11 @@ final class DecisionEngine {
         ]
     }
 
-    func approve(_ item: DeckItem, always: Bool) {
-        if always, let sentence = item.alwaysSentence,
-           !rules.contains(where: { $0.sentence == sentence }) {
-            rules.insert(DeckRule(sentence: sentence, scope: scope(for: item.kind), logo: item.logo, uses: 1,
+    func approve(_ item: DeckItem, always: Bool, scope: String? = nil) {
+        let ruleText = scope ?? item.alwaysSentence
+        if always, let ruleText,
+           !rules.contains(where: { $0.sentence == ruleText }) {
+            rules.insert(DeckRule(sentence: ruleText, scope: scopeName(for: item.kind), logo: item.logo, uses: 1,
                                   trail: ["JUST NOW · you approved \"\(item.ask)\" and chose always"]), at: 0)
         }
         run(item)
@@ -515,7 +536,7 @@ final class DecisionEngine {
         }
     }
 
-    private func scope(for kind: String) -> String {
+    private func scopeName(for kind: String) -> String {
         switch kind {
         case "send_draft": "Mail"
         case "create_meeting": "Calendar"
@@ -877,7 +898,7 @@ private struct RunTrack: View {
 private struct DetailTicket: View {
     let ticket: DeckTicket
     let item: DeckItem
-    @State private var editing = false
+    @State private var picking = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -886,8 +907,12 @@ private struct DetailTicket: View {
                 .kerning(1.1)
                 .foregroundStyle(DS.Palette.placeholder)
 
+            // Tapping the time opens a wheel in its own sheet. Expanding a
+            // picker inside the card pushed the card past its own height and
+            // left no way back out — a control that can trap you is worse than
+            // no control.
             Button {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.78)) { editing.toggle() }
+                picking = true
                 _ = DSHaptics.tap(.light)
             } label: {
                 HStack(spacing: 8) {
@@ -895,54 +920,91 @@ private struct DetailTicket: View {
                         .font(.system(size: 30, weight: .light))
                         .tracking(-0.4)
                         .foregroundStyle(DS.Palette.ink)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
+                        .contentTransition(.numericText())
+                    Image(systemName: "pencil")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(DS.Palette.placeholder)
-                        .rotationEffect(.degrees(editing ? 180 : 0))
                     Spacer(minLength: 0)
                 }
                 .padding(.top, 4)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
-            if editing {
-                DatePicker("", selection: Binding(get: { item.ticketTime },
-                                                  set: { item.ticketTime = $0 }),
-                           displayedComponents: .hourAndMinute)
-                    .datePickerStyle(.wheel)
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 128)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
-            }
-
-            HStack(spacing: 7) {
-                ForEach(Array(ticket.lines.enumerated()), id: \.offset) { index, line in
-                    if index > 0 {
-                        Circle().fill(DS.Palette.placeholder.opacity(0.5))
-                            .frame(width: 2.5, height: 2.5)
-                    }
-                    Text(line)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(DS.Palette.subtle)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 8)
         }
         .padding(.horizontal, 15)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.ultraThinMaterial,
                     in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-        .background(Color.white.opacity(0.035),
+        .background(Color.primary.opacity(0.035),
                     in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
             .strokeBorder(
-                LinearGradient(colors: [Color.white.opacity(0.16), Color.white.opacity(0.04)],
+                LinearGradient(colors: [Color.primary.opacity(0.16), Color.primary.opacity(0.04)],
                                startPoint: .top, endPoint: .bottom),
                 lineWidth: 1))
+        .sheet(isPresented: $picking) {
+            TimeSheet(time: Binding(get: { item.ticketTime }, set: { item.ticketTime = $0 }),
+                      title: ticket.eyebrow)
+                .presentationDetents([.height(340)])
+                .presentationDragIndicator(.hidden)
+        }
+    }
+}
+
+/// The wheel, on its own surface, with one way out.
+private struct TimeSheet: View {
+    @Binding var time: Date
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        SheetChrome(title: title.capitalized) {
+            DatePicker("", selection: $time, displayedComponents: .hourAndMinute)
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+
+            Button { dismiss() } label: {
+                Text("Use this time")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(DS.Palette.onInk)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(DS.Palette.ink,
+                                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 12)
+        }
+    }
+}
+
+/// The supporting facts, in their own row rather than crowded under the time
+/// they belong to.
+private struct DetailChips: View {
+    let lines: [String]
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                if index > 0 {
+                    Circle().fill(DS.Palette.placeholder.opacity(0.5))
+                        .frame(width: 2.5, height: 2.5)
+                }
+                Text(line)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(DS.Palette.subtle)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
     }
 }
 
@@ -1323,7 +1385,10 @@ private struct AskCard: View {
                         }
                         Spacer(minLength: 16)
                         if let ticket = item.ticket {
-                            DetailTicket(ticket: ticket, item: item)
+                            VStack(alignment: .leading, spacing: 8) {
+                                DetailTicket(ticket: ticket, item: item)
+                                DetailChips(lines: ticket.lines)
+                            }
                         } else if let facts = item.facts {
                             Stratum(label: item.responseLabel) {
                                 Text(facts)
@@ -1339,17 +1404,6 @@ private struct AskCard: View {
                 .padding(DK.pad)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-                if let sentence = item.alwaysSentence, item.phase == .asking {
-                    alwaysMenu(sentence)
-                        .padding(.horizontal, DK.pad)
-                        .padding(.bottom, 12)
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.86, anchor: .bottomTrailing)
-                                .combined(with: .opacity)
-                                .combined(with: .offset(y: 10)),
-                            removal: .scale(scale: 0.94, anchor: .bottomTrailing)
-                                .combined(with: .opacity)))
-                }
 
                 Group {
                     if running { runRail }
@@ -1445,56 +1499,94 @@ private struct AskCard: View {
                     .background(.ultraThinMaterial,
                                 in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+                        .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1))
             }
             .buttonStyle(.plain)
 
-            Button {
-                engine.approve(item, always: alwaysOpen)
-            } label: {
-                Text(alwaysOpen ? "\(item.primaryLabel), always" : item.primaryLabel)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(DS.Palette.onInk)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
-                    .background(
-                        LinearGradient(colors: [Color.white, Color(white: 0.88)],
-                                       startPoint: .top, endPoint: .bottom),
-                        in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-                    .contentTransition(.opacity)
+            HStack(spacing: 0) {
+                Button { engine.approve(item, always: false) } label: {
+                    Text(item.primaryLabel)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(DS.Palette.onInk)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                }
+                .buttonStyle(.plain)
+
+                if !item.alwaysScopes.isEmpty {
+                    Button {
+                        withAnimation(.spring(response: 0.34, dampingFraction: 0.76)) {
+                            alwaysOpen.toggle()
+                        }
+                        _ = DSHaptics.tap(.light)
+                    } label: {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(DS.Palette.onInk.opacity(0.8))
+                            .frame(width: 44, height: 54)
+                            .rotationEffect(.degrees(alwaysOpen ? 180 : 0))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .overlay(alignment: .leading) {
+                        Rectangle().fill(DS.Palette.onInk.opacity(0.18))
+                            .frame(width: 1, height: 22)
+                    }
+                }
             }
-            .buttonStyle(.plain)
+            .background(
+                LinearGradient(colors: [Color.white, Color(white: 0.88)],
+                               startPoint: .top, endPoint: .bottom),
+                in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+            // The menu FLOATS above the caret rather than sitting in the
+            // layout: expanding it inside the row grew the card past its own
+            // slot and pushed the whole deck out of alignment.
+            .overlay(alignment: .bottomTrailing) {
+                if alwaysOpen {
+                    scopeMenu
+                        .frame(width: 300)
+                        .alignmentGuide(.bottom) { $0[.top] - 8 }
+                        .transition(.scale(scale: 0.9, anchor: .bottomTrailing)
+                            .combined(with: .opacity))
+                }
+            }
         }
     }
 
-    /// The standing rule is a decision you make BEFORE approving, so it is a
-    /// switch above the button rather than a second button beside it — and the
-    /// button then says what it is about to do: "Send it, always".
-    private func alwaysMenu(_ sentence: String) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.76)) { alwaysOpen.toggle() }
-            _ = DSHaptics.tap(.light)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: alwaysOpen ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 15))
-                    .foregroundStyle(alwaysOpen ? DS.Palette.ink : DS.Palette.placeholder)
-                Text(sentence)
-                    .font(.system(size: 13.5, weight: alwaysOpen ? .medium : .regular))
-                    .foregroundStyle(alwaysOpen ? DS.Palette.ink : DS.Palette.subtle)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
+    private var scopeMenu: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(item.alwaysScopes.enumerated()), id: \.offset) { index, scope in
+                if index > 0 {
+                    Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1)
+                }
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { alwaysOpen = false }
+                    engine.approve(item, always: true, scope: scope)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "infinity")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(DS.Palette.placeholder)
+                        Text(scope)
+                            .font(.system(size: 14))
+                            .foregroundStyle(DS.Palette.ink)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 46)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.ultraThinMaterial,
-                        in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                .strokeBorder(Color.white.opacity(alwaysOpen ? 0.22 : 0.08), lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .background(.ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+        .background(DS.Palette.card.opacity(0.6),
+                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+            .strokeBorder(Color.primary.opacity(0.16), lineWidth: 1))
+        .shadow(color: .black.opacity(0.4), radius: 18, y: 8)
     }
 
     /// It did not work. The rail stops where it stopped, the reason is plain,
