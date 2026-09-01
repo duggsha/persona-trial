@@ -14,8 +14,11 @@ struct ThinkingSheet: View {
     /// rather than a list that was always sitting there.
     @State private var revealed = 0
 
+    @State private var rated: Bool?
+
     var body: some View {
         SheetChrome(title: "How Iris got here") {
+            ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
                 phase(0, dot: true) {
                     Text(item.ask)
@@ -89,27 +92,87 @@ struct ThinkingSheet: View {
                     }
                 }
 
-                phase(4, last: true) {
-                    HStack(spacing: 9) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 15))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(Color.black, DS.Palette.success)
-                        Text("Ready for you")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(DS.Palette.subtle)
+                phase(4) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Label("Ruled out", systemImage: "xmark")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(DS.Palette.placeholder)
+                        ForEach(trace.ruledOut, id: \.self) { line in
+                            HStack(alignment: .top, spacing: 8) {
+                                Text("—")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(DS.Palette.placeholder.opacity(0.7))
+                                Text(line)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(DS.Palette.subtle)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+
+                phase(5, last: true) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 9) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 15))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(Color.black, DS.Palette.success)
+                            Text("Ready for you")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(DS.Palette.subtle)
+                        }
+
+                        // Reasoning you cannot correct is reasoning you cannot
+                        // trust. This is the only place the judgment itself can
+                        // be marked wrong, so it belongs at the end of it.
+                        HStack(spacing: 8) {
+                            rateButton(good: true)
+                            rateButton(good: false)
+                            Spacer(minLength: 0)
+                        }
+                        .id("end")
                     }
                 }
             }
-        }
-        .task {
-            // Staged, not staggered for decoration: each step appears when the
-            // one before it has been read.
-            for step in 0 ... 4 {
-                withAnimation(.smooth(duration: 0.32)) { revealed = step }
-                try? await Task.sleep(for: .milliseconds(step == 0 ? 120 : 260))
+            .task {
+                // Staged, not staggered for decoration: each step appears when
+                // the one before it has been read, and the sheet follows it
+                // down so the last phases never happen off screen.
+                for step in 0 ... 5 {
+                    withAnimation(.smooth(duration: 0.32)) { revealed = step }
+                    if step >= 2 {
+                        withAnimation(.smooth(duration: 0.4)) {
+                            proxy.scrollTo("end", anchor: .bottom)
+                        }
+                    }
+                    try? await Task.sleep(for: .milliseconds(step == 0 ? 120 : 300))
+                }
+            }
             }
         }
+    }
+
+    private func rateButton(good: Bool) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.22)) { rated = good }
+            _ = DSHaptics.tap(good ? .light : .rigid)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: good ? "hand.thumbsup" : "hand.thumbsdown")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(rated == good ? (good ? "Noted" : "Iris will ask sooner") : (good ? "Good call" : "Not right"))
+                    .font(.system(size: 12.5, weight: .medium))
+            }
+            .foregroundStyle(rated == good ? DS.Palette.onInk : DS.Palette.subtle)
+            .padding(.horizontal, 13)
+            .frame(height: 34)
+            .background(rated == good ? AnyShapeStyle(DS.Palette.ink) : AnyShapeStyle(Material.ultraThin),
+                        in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .opacity(rated != nil && rated != good ? 0.4 : 1)
     }
 
     /// One step of the replay, hung off a rail that runs the length of the trace.

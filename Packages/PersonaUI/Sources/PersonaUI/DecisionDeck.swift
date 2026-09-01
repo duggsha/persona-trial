@@ -151,6 +151,9 @@ struct ThinkingTrace: Equatable {
     let sources: [Source]
     /// Why this is being asked rather than just done.
     let judgment: String
+    /// What Iris considered and dropped. A trace that only lists what survived
+    /// reads as a summary; the discarded options are what make it reasoning.
+    let ruledOut: [String]
 }
 
 /// A thing already in motion. Their repo has this shape behind an unshipped
@@ -269,7 +272,10 @@ final class DecisionEngine {
                         .init(logo: .calendar, title: "Thursday 2:00–3:00 PM", origin: "free"),
                         .init(logo: .mail, title: "Your last 40 replies to Sarah", origin: "tone"),
                     ],
-                    judgment: "No standing rule covers replying to Sarah, so this one is yours."),
+                    judgment: "No standing rule covers replying to Sarah, so this one is yours.",
+                    ruledOut: ["Friday. She is out of office",
+                               "Answering without the room booked. She asked for both",
+                               "Sending it silently. You have never let Iris write to Sarah"]),
                 draft: "Thursday still works. 2pm at your office? I'll bring the printed boards.",
                 primaryLabel: "Send reply",
                 alwaysSentence: "Always send scheduling replies to Sarah",
@@ -298,7 +304,10 @@ final class DecisionEngine {
                         .init(logo: .calendar, title: "Wed 3:30–4:00 PM", origin: "only shared slot"),
                         .init(logo: .calendar, title: "You default to 30 minutes", origin: "42 meetings"),
                     ],
-                    judgment: "Booking time with someone new is not covered by a rule yet."),
+                    judgment: "Booking time with someone new is not covered by a rule yet.",
+                    ruledOut: ["Tuesday 2:00. You hold that for deep work",
+                               "60 minutes. Your last 42 meetings were 30",
+                               "Thursday. Sarah already has that slot pending"]),
                 ticket: DeckTicket(eyebrow: "WEDNESDAY",
                                    headline: "3:30 – 4:00 PM",
                                    lines: ["30 min", "invite to Jason", "no conflicts"]),
@@ -331,7 +340,10 @@ final class DecisionEngine {
                         .init(logo: .calendar, title: "Saturday is clear", origin: "no conflicts"),
                         .init(logo: .messages, title: "You reply to Maya in one line", origin: "tone"),
                     ],
-                    judgment: "Sending as you to a person is always worth one tap."),
+                    judgment: "Sending as you to a person is always worth one tap.",
+                    ruledOut: ["Waiting until tonight. She needs the headcount by then",
+                               "A longer reply. You answer Maya in one line",
+                               "Declining. Your Saturday is clear"]),
                 draft: "Yes, count me in for Saturday.",
                 primaryLabel: "Send it",
                 alwaysSentence: "Always send plan replies to Maya",
@@ -362,7 +374,10 @@ final class DecisionEngine {
                         .init(logo: .resy, title: "Saved by you Mar 2", origin: "saved"),
                         .init(logo: .calendar, title: "Nothing after 6 PM", origin: "free"),
                     ],
-                    judgment: "You asked for this in chat, so it is a confirmation, not a suggestion."),
+                    judgment: "You asked for this in chat, so it is a confirmation, not a suggestion.",
+                    ruledOut: ["9:15 PM. Later than you have ever booked",
+                               "Sushi Kashiba. You have not saved it",
+                               "Booking silently. It charges a deposit"]),
                 ticket: DeckTicket(eyebrow: "MARUFUKU · TONIGHT",
                                    headline: "7:45 PM",
                                    lines: ["2 seats", "counter", "$40 hold"]),
@@ -1187,8 +1202,11 @@ private struct AskCard: View {
                         .padding(.horizontal, DK.pad)
                         .padding(.bottom, 10)
                         .transition(.asymmetric(
-                            insertion: .offset(y: 8).combined(with: .opacity),
-                            removal: .opacity))
+                            insertion: .scale(scale: 0.86, anchor: .bottomTrailing)
+                                .combined(with: .opacity)
+                                .combined(with: .offset(y: 10)),
+                            removal: .scale(scale: 0.94, anchor: .bottomTrailing)
+                                .combined(with: .opacity)))
                 }
 
                 Group {
@@ -1201,7 +1219,7 @@ private struct AskCard: View {
                 .padding(.vertical, 12)
             }
         }
-        .animation(.snappy(duration: 0.2), value: alwaysOpen)
+        .animation(.spring(response: 0.34, dampingFraction: 0.74), value: alwaysOpen)
         .animation(.snappy(duration: 0.26), value: running)
         .sheet(isPresented: $traceShown) {
             if let trace = item.trace {
@@ -1724,28 +1742,44 @@ private struct BriefAskRow: View {
 struct JudgmentSheet: View {
     var engine: DecisionEngine = .shared
     @State private var opened: UUID?
+    @State private var appeared = false
 
     var body: some View {
         SheetChrome(title: "Judgment") {
-            SheetSection(title: "Acts without asking") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("ACTS WITHOUT ASKING · \(engine.rules.count)")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .kerning(1.1)
+                    .foregroundStyle(DS.Palette.placeholder)
+                    .padding(.leading, 2)
+                    .padding(.bottom, 2)
+
+                // Each rule is its own plate. They were rows in one container
+                // divided by hairlines, which read as a settings list — but a
+                // standing permission is an object you granted, and three of
+                // them are three objects.
                 ForEach(Array(engine.rules.enumerated()), id: \.element.id) { index, rule in
-                    if index > 0 { SheetDivider() }
                     RuleRow(
                         rule: rule,
                         open: opened == rule.id,
                         onToggle: {
-                            withAnimation(.snappy(duration: 0.24)) {
+                            withAnimation(.snappy(duration: 0.26)) {
                                 opened = opened == rule.id ? nil : rule.id
                             }
                             _ = DSHaptics.tap(.light)
                         },
                         onDelete: {
-                            withAnimation(.snappy(duration: 0.25)) { engine.deleteRule(rule) }
+                            withAnimation(.snappy(duration: 0.28)) { engine.deleteRule(rule) }
                         }
                     )
+                    // Staggered in, the way the trace sheet stages its steps.
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 10)
+                    .animation(.smooth(duration: 0.34).delay(Double(index) * 0.05), value: appeared)
                 }
             }
         }
+        .task { appeared = true }
     }
 }
 
@@ -1761,33 +1795,42 @@ private struct RuleRow: View {
         VStack(alignment: .leading, spacing: 0) {
             Button(action: onToggle) {
                 HStack(spacing: 13) {
-                    IrisLogoTile(logo: rule.logo, size: 22)
-                    Text(rule.sentence)
-                        .font(.system(size: 15.5, weight: .regular))
-                        .foregroundStyle(DS.Palette.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    IrisLogoTile(logo: rule.logo, size: 24)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(rule.sentence)
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundStyle(DS.Palette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("\(rule.uses) TIMES")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .kerning(0.9)
+                            .foregroundStyle(DS.Palette.placeholder)
+                    }
                     Image(systemName: "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(DS.Palette.placeholder)
                         .rotationEffect(.degrees(open ? 180 : 0))
                 }
-                .padding(.horizontal, 14)
-                .frame(minHeight: 54)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 15)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             if open {
                 VStack(alignment: .leading, spacing: 0) {
+                    Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
+
                     Text("LEARNED FROM")
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
                         .kerning(1)
                         .foregroundStyle(DS.Palette.placeholder)
-                        .padding(.bottom, 9)
+                        .padding(.top, 15)
+                        .padding(.bottom, 10)
 
                     ForEach(Array(rule.trail.enumerated()), id: \.offset) { index, line in
-                        HStack(alignment: .top, spacing: 10) {
+                        HStack(alignment: .top, spacing: 11) {
                             VStack(spacing: 0) {
                                 Circle()
                                     .fill(DS.Palette.placeholder.opacity(0.7))
@@ -1802,7 +1845,7 @@ private struct RuleRow: View {
                             }
                             .frame(width: 4)
                             Text(line)
-                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .font(.system(size: 12, design: .monospaced))
                                 .foregroundStyle(DS.Palette.subtle)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .padding(.bottom, index < rule.trail.count - 1 ? 10 : 0)
@@ -1817,25 +1860,36 @@ private struct RuleRow: View {
                                 .font(.system(size: 13, weight: .medium))
                         }
                         .foregroundStyle(DS.Palette.ink)
-                        .padding(.horizontal, 13)
-                        .frame(height: 34)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
                         .background(.ultraThinMaterial, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .padding(.top, 14)
+                    .padding(.top, 15)
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 16)
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.03))
-                // The panel grows out of the row it belongs to rather than
-                // fading in over it.
                 .transition(.asymmetric(
                     insertion: .move(edge: .top).combined(with: .opacity),
                     removal: .opacity))
-                .clipped()
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(colors: [Color.white.opacity(0.055), Color.white.opacity(0.012), .clear],
+                           startPoint: .top, endPoint: .bottom),
+            in: RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
+        .background(.ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(open ? 0.24 : 0.14),
+                                            Color.white.opacity(0.04)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: DK.cardRadius, style: .continuous))
     }
 }
