@@ -30,6 +30,7 @@ public struct DesignTrialHost: View {
     @State private var page: PersonaPage = .home
     /// The menu button's slide-over.
     @State private var sidebarOpen = false
+    @State private var settingsShown = false
     /// Live horizontal drag distance while a page swipe is in flight.
     @State private var dragX: CGFloat = 0
     /// Latched once a drag is decisively horizontal: the pages' vertical
@@ -81,12 +82,18 @@ public struct DesignTrialHost: View {
                     page: page,
                     onHome: { withAnimation(DS.Motion.page) { page = .home } },
                     onChat: { showChat() },
-                    onJudgment: { DecisionEngine.shared.judgmentShown = true }
+                    onJudgment: { DecisionEngine.shared.judgmentShown = true },
+                    onSettings: { settingsShown = true }
                 )
             }
             .sheet(isPresented: Bindable(DecisionEngine.shared).judgmentShown) {
                 JudgmentSheet()
                     .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.hidden)
+            }
+            .sheet(isPresented: $settingsShown) {
+                SettingsSheet()
+                    .presentationDetents([.large])
                     .presentationDragIndicator(.hidden)
             }
         }

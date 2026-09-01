@@ -387,6 +387,17 @@ struct HomeScreen: View, Equatable {
     }
 
     var body: some View {
+        // The redesign owns the whole surface: a full-screen decision pager,
+        // not a scrolling page of sections. The shipped page stays reachable
+        // at -LEGACY_HOME for comparison.
+        if ProcessInfo.processInfo.arguments.contains("-LEGACY_HOME") {
+            legacyBody
+        } else {
+            DeckScreen()
+        }
+    }
+
+    private var legacyBody: some View {
         ZStack(alignment: .bottom) {
             homeScroll
             if let undoToast {
@@ -720,18 +731,7 @@ struct HomeScreen: View, Equatable {
                 // HomeStatusView instead).
                 // Gate on what can actually DRAW: the pinned codes and the deck
                 // are the only rows this section has.
-                // THE DESIGN TRIAL'S REDESIGN. The decision deck replaces the
-                // one-size-fits-all card list: asks, utilities and receipts each
-                // get their own anatomy, actions live on the card, stakes are
-                // printed with counted precedent, and standing rules are readable
-                // in Judgment. Launch with -LEGACY_HOME to compare against the
-                // shipped deck this trial started from.
-                if !ProcessInfo.processInfo.arguments.contains("-LEGACY_HOME") {
-                    // Full width: the deck's cards share LEFT/RIGHT edges with
-                    // the composer bar — one column, one grid.
-                    DecisionDeck()
-                        .padding(.top, 18)
-                } else if !pinnedUpdates.isEmpty || !feed.isEmpty || hasData {
+                if !pinnedUpdates.isEmpty || !feed.isEmpty || hasData {
                     // Figma Home_Suggestions Horizontal: 10pt between cards.
                     // Lazy so the uncapped deck's off-screen cards (each a heavy
                     // SuggestionCard/UpdateCard with a swipe state machine) aren't
