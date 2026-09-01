@@ -214,9 +214,6 @@ public struct DesignTrialHost: View {
     private func pageDrag(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12)
             .onChanged { value in
-                // A slide-to-approve owns the horizontal axis while it is under
-                // the finger.
-                guard !DecisionEngine.shared.slideActive else { return }
                 // Latch the axis once: a drag that started vertical belongs to
                 // the page's own scroller and must never move the pager.
                 if !pagingHorizontally {

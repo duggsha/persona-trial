@@ -70,6 +70,7 @@ final class DeckItem: Identifiable {
     let failsOnce: Bool
     let failureLine: String?
     let trace: ThinkingTrace?
+    let tracker: DeckTracker?
     /// Set once the receipt has been read and the card has left the deck.
     var filed = false
     /// Cleared by a retry so the seeded failure only happens once.
@@ -90,7 +91,7 @@ final class DeckItem: Identifiable {
          incoming: String? = nil, triggerLabel: String = "", responseLabel: String = "",
          replyStyle: ReplyStyle = .plain, stakes: Stakes = .low,
          consequence: String? = nil, failsOnce: Bool = false, failureLine: String? = nil,
-         trace: ThinkingTrace? = nil,
+         trace: ThinkingTrace? = nil, tracker: DeckTracker? = nil,
          window: DeckWindow? = nil,
          draft: String? = nil, primaryLabel: String = "", declineLabel: String = "Not this",
          alwaysSentence: String? = nil, steps: [DeckRunStep] = [], receiptLine: String = "",
@@ -108,7 +109,7 @@ final class DeckItem: Identifiable {
         self.replyStyle = replyStyle; self.stakes = stakes
         self.consequence = consequence
         self.failsOnce = failsOnce; self.failureLine = failureLine
-        self.trace = trace
+        self.trace = trace; self.tracker = tracker
         self.window = window
         self.trail = trail; self.createdAgo = createdAgo; self.code = code; self.codeDeadline = codeDeadline
         self.phase = phase; self.filed = filed
@@ -142,6 +143,16 @@ struct ThinkingTrace: Equatable {
     let sources: [Source]
     /// Why this is being asked rather than just done.
     let judgment: String
+}
+
+/// A thing already in motion. Their repo has this shape behind an unshipped
+/// CARD_GRAMMAR flag (T2, the live tracker) and it never got turned on — the
+/// feed can only ever ask, so there is nowhere to watch what you already said
+/// yes to. This is that card.
+struct DeckTracker: Equatable {
+    let stops: [String]
+    let stage: Int
+    let eta: String
 }
 
 struct DeckWindow: Equatable {
@@ -186,9 +197,6 @@ final class DecisionEngine {
     /// Which card the deck is resting on. The composer reads it so one input
     /// can edit whatever you are looking at.
     var focusedID: UUID?
-    /// True while a slide-to-approve is under the finger. The pager reads it
-    /// and stands down: one horizontal drag cannot mean two things.
-    var slideActive = false
     private var graduated = false
 
     // Haptic pulses. Views subscribe with .sensoryFeedback on these counters;
@@ -213,6 +221,15 @@ final class DecisionEngine {
     func seed() {
         guard items.isEmpty else { return }
         items = [
+            DeckItem(
+                kind: "tracker", source: "DOORDASH", logo: .doordash,
+                ask: "Lunch is on the way.",
+                context: "",
+                tracker: DeckTracker(
+                    stops: ["Placed", "Confirmed", "Ready", "On the way", "Delivered"],
+                    stage: 3, eta: "12:40 PM"),
+                createdAgo: "6m"
+            ),
             DeckItem(
                 kind: "send_draft", source: "SARAH WHITFIELD · MAIL", logo: .mail,
                 avatarAsset: "AvatarSarah",
@@ -603,6 +620,8 @@ struct DeckScreen: View {
                         Group {
                             if item.kind == "code" {
                                 CodeCard(item: item)
+                            } else if item.tracker != nil {
+                                TrackerCard(item: item)
                             } else {
                                 AskCard(item: item, engine: engine)
                             }
@@ -713,7 +732,7 @@ private struct ReplyBubble<Content: View>: View {
                     LinearGradient(colors: [Color(red: 0.16, green: 0.53, blue: 1),
                                             Color(red: 0.05, green: 0.40, blue: 0.96)],
                                    startPoint: .top, endPoint: .bottom),
-                    in: BubbleShape())
+                    in: RoundedRectangle(cornerRadius: 21, style: .continuous))
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .mail, .plain:
             content
@@ -721,20 +740,102 @@ private struct ReplyBubble<Content: View>: View {
     }
 }
 
-/// A rounded rectangle with the tail iMessage puts on an outgoing bubble.
-private struct BubbleShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path(roundedRect: rect, cornerRadius: 19, style: .continuous)
-        let tail = CGRect(x: rect.maxX - 16, y: rect.maxY - 19, width: 16, height: 19)
-        path.move(to: CGPoint(x: tail.minX, y: tail.maxY))
-        path.addCurve(to: CGPoint(x: tail.maxX, y: tail.maxY),
-                      control1: CGPoint(x: tail.minX + 9, y: tail.maxY),
-                      control2: CGPoint(x: tail.maxX - 5, y: tail.maxY - 3))
-        path.addCurve(to: CGPoint(x: tail.minX + 3, y: tail.minY),
-                      control1: CGPoint(x: tail.maxX - 11, y: tail.maxY - 7),
-                      control2: CGPoint(x: tail.minX + 3, y: tail.maxY - 12))
-        path.closeSubpath()
-        return path
+/// A card with nothing to decide. It exists because a feed that can only ask
+/// leaves you nowhere to watch the thing you already approved — so the moment
+/// you say yes, it drops out of your life entirely until it succeeds or fails.
+private struct TrackerCard: View {
+    let item: DeckItem
+
+    var body: some View {
+        DeckPlate(fills: true) {
+            VStack(alignment: .leading, spacing: 0) {
+                SourceRow(item: item)
+                    .padding(.horizontal, DK.pad)
+                    .frame(height: 48)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(item.ask)
+                        .font(.system(size: 33, weight: .light))
+                        .tracking(-0.5)
+                        .foregroundStyle(DS.Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 20)
+
+                    if let tracker = item.tracker {
+                        StageRail(tracker: tracker)
+
+                        Spacer(minLength: 18)
+
+                        HStack(spacing: 7) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Arrives \(tracker.eta)")
+                                .font(.system(size: 13, weight: .medium))
+                            Spacer(minLength: 0)
+                            Text(tracker.stops[tracker.stage].uppercased())
+                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                .kerning(1)
+                                .foregroundStyle(DS.Palette.placeholder)
+                        }
+                        .foregroundStyle(DS.Palette.subtle)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(DK.pad)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+    }
+}
+
+/// The stages, as a rail. Everything behind the current stop is filled,
+/// everything ahead is a hairline — where you are is legible without reading a
+/// word, which is the whole job of a card you only ever glance at.
+private struct StageRail: View {
+    let tracker: DeckTracker
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GeometryReader { geo in
+                let count = tracker.stops.count
+                let gap = geo.size.width / CGFloat(count - 1)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.10)).frame(height: 2)
+                    Capsule()
+                        .fill(DS.Palette.ink)
+                        .frame(width: gap * CGFloat(tracker.stage), height: 2)
+                    ForEach(0 ..< count, id: \.self) { index in
+                        Circle()
+                            .fill(index <= tracker.stage ? DS.Palette.ink : Color.white.opacity(0.16))
+                            .frame(width: index == tracker.stage ? 9 : 5,
+                                   height: index == tracker.stage ? 9 : 5)
+                            .overlay {
+                                if index == tracker.stage {
+                                    Circle()
+                                        .stroke(DS.Palette.ink.opacity(0.35), lineWidth: 1)
+                                        .frame(width: 17, height: 17)
+                                }
+                            }
+                            .offset(x: gap * CGFloat(index) - (index == tracker.stage ? 4.5 : 2.5))
+                    }
+                }
+                .frame(height: 18)
+            }
+            .frame(height: 18)
+
+            HStack(spacing: 0) {
+                ForEach(Array(tracker.stops.enumerated()), id: \.offset) { index, stop in
+                    Text(stop)
+                        .font(.system(size: 9, weight: index == tracker.stage ? .semibold : .regular,
+                                      design: .monospaced))
+                        .foregroundStyle(index <= tracker.stage ? DS.Palette.subtle : DS.Palette.placeholder.opacity(0.6))
+                        .frame(maxWidth: .infinity,
+                               alignment: index == 0 ? .leading : (index == tracker.stops.count - 1 ? .trailing : .center))
+                }
+            }
+        }
     }
 }
 
@@ -1080,7 +1181,7 @@ private struct AskCard: View {
                 }
                 .buttonStyle(.plain)
 
-                SlideToApprove(label: item.primaryLabel) {
+                HoldToApprove(label: item.primaryLabel) {
                     alwaysOpen = false
                     engine.approve(item, always: false)
                 }
@@ -1095,46 +1196,43 @@ private struct AskCard: View {
                     Text(item.declineLabel)
                         .font(.system(size: 15.5, weight: .regular))
                         .foregroundStyle(DS.Palette.inkMuted)
-                        .frame(height: 50)
-                        .padding(.horizontal, 16)
+                        .frame(height: 54)
+                        .padding(.horizontal, 18)
+                        .background(.ultraThinMaterial,
+                                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                            .strokeBorder(DS.Palette.hairline, lineWidth: 1))
+                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
 
-                HStack(spacing: 1) {
-                    Button {
-                        guard item.stakes == .low else { return }
-                        alwaysOpen = false
-                        engine.approve(item, always: false)
-                    } label: {
-                        Text(item.primaryLabel)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(DS.Palette.onInk)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
+                Button {
+                    alwaysOpen = false
+                    engine.approve(item, always: false)
+                } label: {
+                    Text(item.primaryLabel)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(DS.Palette.onInk)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(DS.Palette.ink,
+                                    in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                if item.alwaysSentence != nil {
+                    Button { alwaysOpen.toggle() } label: {
+                        Image(systemName: "infinity")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(alwaysOpen ? DS.Palette.onInk : DS.Palette.inkMuted)
+                            .frame(width: 54, height: 54)
+                            .background(alwaysOpen ? AnyShapeStyle(DS.Palette.ink)
+                                                   : AnyShapeStyle(Material.ultraThin),
+                                        in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-
-                    if item.alwaysSentence != nil {
-                        Button {
-                            alwaysOpen.toggle()
-                        } label: {
-                            Image(systemName: "chevron.up")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(DS.Palette.onInk.opacity(0.85))
-                                .frame(width: 42, height: 50)
-                                .rotationEffect(.degrees(alwaysOpen ? 180 : 0))
-                        }
-                        .buttonStyle(.plain)
-                        .overlay(alignment: .leading) {
-                            Rectangle().fill(DS.Palette.onInk.opacity(0.22))
-                                .frame(width: 1, height: 24)
-                        }
-                    }
                 }
-                .background(DS.Palette.ink,
-                            in: RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
             }
 
         }

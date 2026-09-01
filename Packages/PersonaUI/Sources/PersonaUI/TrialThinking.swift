@@ -140,97 +140,103 @@ struct ThinkingSheet: View {
     }
 }
 
-/// The high-stakes control. A tap is the right amount of effort for something
-/// private and reversible; sending a message as you, or spending your money,
-/// should cost a deliberate movement. The track fills as you go, the haptic
-/// lands at the commit point, and letting go early springs back — the gesture
-/// is interruptible right up until it isn't.
-struct SlideToApprove: View {
+/// The high-stakes control: press and hold.
+///
+/// A slide was the first answer and it was the wrong one. Apple's own rule for
+/// a destructive or paid action is deliberate effort separated from the
+/// trigger — not lateral travel; that is why paying is a double-click of the
+/// side button and not a swipe. A slide also costs a full thumb traverse of a
+/// 6-inch screen one-handed, and it fought the pager for the horizontal axis,
+/// so approving could page the app sideways instead.
+///
+/// Hold keeps the thumb where it already is, shows exactly how far along the
+/// commit is, and cancels the instant you let go — interruptible right up to
+/// the moment it isn't.
+struct HoldToApprove: View {
     let label: String
     let onApprove: () -> Void
 
-    @State private var offset: CGFloat = 0
-    @State private var armed = false
+    @State private var progress: CGFloat = 0
+    @State private var holding = false
     @State private var done = false
+    @State private var ticker: Task<Void, Never>?
 
-    private let knob: CGFloat = 46
+    /// Long enough to be a decision, short enough never to feel like a wait.
+    private let duration: Double = 0.9
 
     var body: some View {
-        GeometryReader { geo in
-            let travel = max(geo.size.width - knob - 8, 1)
-            let progress = min(max(offset / travel, 0), 1)
-
-            ZStack(alignment: .leading) {
-                // The track fills behind the knob, so progress is legible
-                // without reading anything.
-                RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    // The trail behind the knob is a wash, not a second solid
-                    // block — a hard fill made the knob read as a boxed button.
-                    .overlay(alignment: .leading) {
+        ZStack {
+            RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(alignment: .leading) {
+                    // The fill IS the progress. No separate spinner, no ring
+                    // orbiting a label — the button becomes the indicator.
+                    GeometryReader { geo in
                         Rectangle()
-                            .fill(Color.white.opacity(0.06 + 0.16 * progress))
-                            .frame(width: knob + 8 + travel * progress)
-                    }
-                    .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                    .clipShape(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
-
-                HStack(spacing: 7) {
-                    Text(done ? "Sending" : label)
-                        .font(.system(size: 15.5, weight: .medium))
-                        .foregroundStyle(DS.Palette.ink)
-                    if !done {
-                        Image(systemName: "chevron.compact.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(DS.Palette.placeholder)
+                            .fill(DS.Palette.ink)
+                            .frame(width: geo.size.width * progress)
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.leading, knob * 0.5)
-                .opacity(1 - progress * 1.4)
+                .clipShape(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
 
-                RoundedRectangle(cornerRadius: DK.wellRadius - 1, style: .continuous)
-                    .fill(DS.Palette.ink)
-                    .frame(width: knob, height: knob)
-                    .overlay(
-                        Image(systemName: done ? "checkmark" : "arrow.right")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(DS.Palette.onInk)
-                    )
-                    .offset(x: 4 + offset)
-                    .highPriorityGesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                guard !done else { return }
-                                DecisionEngine.shared.slideActive = true
-                                offset = min(max(value.translation.width, 0), travel)
-                                // One haptic, at the point of no return.
-                                let past = offset / travel > 0.92
-                                if past != armed {
-                                    armed = past
-                                    if past { _ = DSHaptics.tap(.rigid) }
-                                }
-                            }
-                            .onEnded { _ in
-                                DecisionEngine.shared.slideActive = false
-                                guard !done else { return }
-                                if offset / travel > 0.92 {
-                                    done = true
-                                    withAnimation(.snappy(duration: 0.18)) { offset = travel }
-                                    onApprove()
-                                } else {
-                                    // Let go early and it springs back. Nothing
-                                    // happens, and nothing needs undoing.
-                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.7)) {
-                                        offset = 0
-                                    }
-                                    armed = false
-                                }
-                            }
-                    )
+            HStack(spacing: 7) {
+                Image(systemName: done ? "checkmark" : "hand.tap.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(done ? "Sending" : (holding ? "Keep holding" : label))
+                    .font(.system(size: 15.5, weight: .medium))
+                    .contentTransition(.opacity)
             }
+            .foregroundStyle(progress > 0.5 ? DS.Palette.onInk : DS.Palette.ink)
+            .animation(.smooth(duration: 0.18), value: progress > 0.5)
         }
         .frame(height: 54)
+        .contentShape(RoundedRectangle(cornerRadius: DK.wellRadius, style: .continuous))
+        .scaleEffect(holding ? 0.985 : 1)
+        .animation(.spring(response: 0.28, dampingFraction: 0.7), value: holding)
+        .onLongPressGesture(minimumDuration: 60, maximumDistance: 40) {
+            // Never fires: the ticker owns completion. This gesture exists for
+            // its press state, which is what gives us press-in and release.
+        } onPressingChanged: { pressing in
+            holding = pressing && !done
+            pressing ? start() : cancel()
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(Text(label))
+        .accessibilityHint(Text("Press and hold to confirm"))
+        .accessibilityAction { commit() }
+    }
+
+    private func start() {
+        guard !done else { return }
+        _ = DSHaptics.tap(.light)
+        ticker?.cancel()
+        ticker = Task { @MainActor in
+            let step = 0.016
+            while progress < 1 {
+                try? await Task.sleep(for: .milliseconds(16))
+                if Task.isCancelled { return }
+                progress = min(progress + CGFloat(step / duration), 1)
+            }
+            commit()
+        }
+    }
+
+    private func cancel() {
+        guard !done else { return }
+        ticker?.cancel()
+        // Let go early and it drains back. Nothing happened, so nothing needs
+        // undoing — the cheapest possible way to change your mind.
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { progress = 0 }
+    }
+
+    private func commit() {
+        guard !done else { return }
+        done = true
+        holding = false
+        withAnimation(.snappy(duration: 0.16)) { progress = 1 }
+        _ = DSHaptics.tap(.rigid)
+        onApprove()
     }
 }

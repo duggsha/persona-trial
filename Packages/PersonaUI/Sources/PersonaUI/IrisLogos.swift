@@ -5,6 +5,7 @@ import PersonaDesign
 /// network, and a step that says "Mail" should look like Mail from across
 /// the room. Same trick as the challenge-one build.
 enum IrisLogo {
+    case doordash
     case iris, mail, calendar, messages, resy, github, delta, wallet, check
 }
 
@@ -21,6 +22,7 @@ extension IrisLogo {
         case .delta:     Color(red: 0.83, green: 0.10, blue: 0.26)
         case .wallet:    Color(red: 0.99, green: 0.62, blue: 0.09)
         case .check:     Color(red: 0.27, green: 0.78, blue: 0.40)
+        case .doordash:  Color(red: 0.94, green: 0.23, blue: 0.16)
         case .iris:      Color(white: 0.75)
         }
     }
@@ -44,6 +46,15 @@ struct IrisLogoTile: View {
                     .padding(size * 0.16)
                     .foregroundStyle(DS.Palette.ink)
                     .frame(width: size, height: size)
+            case .doordash:
+                ZStack {
+                    RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                        .fill(Color(red: 0.94, green: 0.23, blue: 0.16))
+                    Text("D")
+                        .font(.system(size: size * 0.58, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: size, height: size)
             case .mail:
                 ZStack {
                     RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
