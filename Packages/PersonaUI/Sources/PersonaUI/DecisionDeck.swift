@@ -1821,13 +1821,8 @@ private struct BriefView: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
                 if let header { header }
-                if let code = engine.asks.first(where: { $0.kind == "code" }) {
-                    CodeCard(item: code)
-                        .frame(height: 210)
-                }
-
                 briefSection("TOP OF MIND") {
-                    ForEach(engine.asks.filter { $0.kind != "code" }) { item in
+                    ForEach(engine.asks) { item in
                         BriefAskRow(item: item, engine: engine)
                     }
                 }
@@ -1860,109 +1855,151 @@ private struct BriefView: View {
     }
 }
 
+/// One row, one shape, one height — whatever the card is.
+///
+/// Brief was drawing four different objects: a 210pt code card, tall rows with
+/// buttons, short rows without, and a tracker whose second line started at the
+/// card edge while its title started after the logo. Every row now hangs off a
+/// single 26pt leading column with one text column beside it, and they are all
+/// the same height, so the page reads as a list instead of a pile.
 private struct BriefAskRow: View {
     @Bindable var item: DeckItem
     let engine: DecisionEngine
 
     private var running: Bool { if case .running = item.phase { true } else { false } }
+    private static let rowHeight: CGFloat = 112
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
+            leading
+                .frame(width: 30, height: 30)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.system(size: 17))
+                    .foregroundStyle(DS.Palette.ink)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer(minLength: 0)
+
+                footer
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .frame(height: Self.rowHeight, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassSurface(radius: DK.cardRadius)
+    }
+
+    private var title: String {
+        item.kind == "code" ? "Your GitHub sign-in code" : item.ask
+    }
+
+    @ViewBuilder
+    private var leading: some View {
+        if let asset = item.avatarAsset {
+            PersonaAsset.image(asset)
+                .resizable().scaledToFill()
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            IrisLogoTile(logo: item.logo, size: 30)
+        }
+    }
+
+    @ViewBuilder
+    private var footer: some View {
+        if item.kind == "code", let code = item.code {
             HStack(spacing: 10) {
-                if let asset = item.avatarAsset {
-                    PersonaAsset.image(asset)
-                        .resizable().scaledToFill()
-                        .frame(width: 26, height: 26)
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                } else {
-                    IrisLogoTile(logo: item.logo, size: 26)
+                Text(code)
+                    .font(.system(size: 20, weight: .light, design: .monospaced))
+                    .kerning(2)
+                    .foregroundStyle(DS.Palette.ink)
+                Spacer(minLength: 0)
+                Button {
+                    UIPasteboard.general.string = code.filter(\.isNumber)
+                    withAnimation(.snappy(duration: 0.2)) { item.copied = true }
+                    _ = DSHaptics.tap(.light)
+                } label: {
+                    Text(item.copied ? "Copied" : "Copy")
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(DS.Palette.inkMuted)
+                        .frame(height: 34)
+                        .padding(.horizontal, 14)
+                        .glassSurface(radius: DK.chipRadius + 1)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.ask)
-                        .font(.system(size: 17, weight: .regular))
-                        .foregroundStyle(DS.Palette.ink)
-                    Text(item.context)
-                        .font(.system(size: 13.5))
+                .buttonStyle(.plain)
+            }
+        } else if running || item.phase == .done || item.phase == .failed {
+            HStack(spacing: 8) {
+                if item.phase == .done {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.black, DS.Palette.success)
+                    Text(item.receiptLine)
+                        .font(.system(size: 13))
+                        .foregroundStyle(DS.Palette.subtle)
+                        .lineLimit(1)
+                } else if item.phase == .failed {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(DS.Palette.danger)
+                    Text("Didn't go through")
+                        .font(.system(size: 13))
+                        .foregroundStyle(DS.Palette.subtle)
+                } else {
+                    ProgressView().controlSize(.mini).tint(DS.Palette.subtle)
+                    Text("Working…")
+                        .font(.system(size: 13))
                         .foregroundStyle(DS.Palette.subtle)
                 }
                 Spacer(minLength: 0)
             }
+            .frame(height: 34)
+        } else if !item.primaryLabel.isEmpty {
+            HStack(spacing: 8) {
+                Button { engine.decline(item) } label: {
+                    Text(item.declineLabel)
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(DS.Palette.inkMuted)
+                        .frame(height: 34)
+                        .padding(.horizontal, 14)
+                        .glassSurface(radius: DK.chipRadius + 1)
+                }
+                .buttonStyle(.plain)
 
-            if running || item.phase == .done || item.phase == .failed {
-                // Brief shows the same states the deck does, in one line.
-                HStack(spacing: 8) {
-                    if item.phase == .done {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 13))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(Color.black, DS.Palette.success)
-                        Text(item.receiptLine)
-                            .font(.system(size: 13))
-                            .foregroundStyle(DS.Palette.subtle)
-                    } else if item.phase == .failed {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(DS.Palette.danger)
-                        Text("Didn't go through")
-                            .font(.system(size: 13))
-                            .foregroundStyle(DS.Palette.subtle)
-                    } else {
-                        ProgressView().controlSize(.mini).tint(DS.Palette.subtle)
-                        Text("Working…")
-                            .font(.system(size: 13))
-                            .foregroundStyle(DS.Palette.subtle)
-                    }
-                    Spacer(minLength: 0)
+                Button { engine.approve(item, always: false) } label: {
+                    Text(item.primaryLabel)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(DS.Palette.onInk)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(
+                            LinearGradient(colors: [Color.primary.opacity(0.92),
+                                                    Color.primary.opacity(0.78)],
+                                           startPoint: .top, endPoint: .bottom),
+                            in: RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous))
+                        .overlay {
+                            Grain(opacity: 0.09).clipShape(
+                                RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous))
+                        }
                 }
-            } else if !item.primaryLabel.isEmpty {
-                // A card with nothing to approve gets no buttons. The tracker
-                // was drawing an empty white slab because it has no primary
-                // label to put in one.
-                HStack(spacing: 8) {
-                    Button { engine.decline(item) } label: {
-                        Text(item.declineLabel)
-                            .font(.system(size: 13.5, weight: .medium))
-                            .foregroundStyle(DS.Palette.inkMuted)
-                            .frame(height: 38)
-                            .padding(.horizontal, 14)
-                            .glassSurface(radius: DK.chipRadius + 1)
-                    }
-                    .buttonStyle(.plain)
-
-                    Button { engine.approve(item, always: false) } label: {
-                        Text(item.primaryLabel)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(DS.Palette.onInk)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 38)
-                            .background(
-                                LinearGradient(colors: [Color.primary.opacity(0.92),
-                                                        Color.primary.opacity(0.78)],
-                                               startPoint: .top, endPoint: .bottom),
-                                in: RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous))
-                            .overlay {
-                                Grain(opacity: 0.09).clipShape(
-                                    RoundedRectangle(cornerRadius: DK.chipRadius + 1, style: .continuous))
-                            }
-                    }
-                    .buttonStyle(.plain)
-                }
-            } else if let tracker = item.tracker {
-                HStack(spacing: 8) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(tracker.headline)
-                        .font(.system(size: 13, weight: .medium))
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(DS.Palette.subtle)
+                .buttonStyle(.plain)
             }
+        } else if let tracker = item.tracker {
+            HStack(spacing: 8) {
+                Image(systemName: "clock")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(tracker.headline)
+                    .font(.system(size: 13, weight: .medium))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(DS.Palette.subtle)
+            .frame(height: 34)
         }
-        .padding(.horizontal, 14)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 13)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(radius: DK.cardRadius)
     }
 }
 
